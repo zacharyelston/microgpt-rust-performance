@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
+use std::time::Instant;
 
 const LEARNING_RATE: f64 = 0.01;
 const BETA1: f64 = 0.85;
@@ -116,11 +117,17 @@ fn relu(a: &ValueRef) -> ValueRef {
 fn backward(loss: &ValueRef) {
     loss.borrow_mut().grad = 1.0;
     
-    let mut topo = Vec::new();
-    let mut visited = std::collections::HashSet::new();
-    build_topo(loss, &mut topo, &mut visited);
+    // Use a simple stack-based reverse traversal instead of topological sort
+    let mut stack = vec![loss.clone()];
+    let mut processed = std::collections::HashSet::new();
     
-    for node_ref in topo.iter().rev() {
+    while let Some(node_ref) = stack.pop() {
+        let ptr = node_ref.as_ptr() as usize;
+        if processed.contains(&ptr) {
+            continue;
+        }
+        processed.insert(ptr);
+        
         let node = node_ref.borrow();
         let node_grad = node.grad;
         let children = node.children.clone();
@@ -128,22 +135,8 @@ fn backward(loss: &ValueRef) {
         
         for (child_ref, local_grad) in children {
             child_ref.borrow_mut().grad += local_grad * node_grad;
+            stack.push(child_ref);
         }
-    }
-}
-
-fn build_topo(v: &ValueRef, topo: &mut Vec<ValueRef>, visited: &mut std::collections::HashSet<usize>) {
-    let ptr = v.as_ptr() as usize;
-    if !visited.contains(&ptr) {
-        visited.insert(ptr);
-        let v_borrow = v.borrow();
-        let children = v_borrow.children.clone();
-        drop(v_borrow);
-        
-        for (child, _) in children {
-            build_topo(&child, topo, visited);
-        }
-        topo.push(v.clone());
     }
 }
 
@@ -196,12 +189,17 @@ fn init_matrix(nout: usize, nin: usize, std: f64, rng: &mut rand::rngs::ThreadRn
 fn linear(x: &[ValueRef], w: &[Vec<ValueRef>]) -> Vec<ValueRef> {
     w.iter()
         .map(|wo| {
-            let mut sum = Value::new(0.0);
+            // Fuse all operations into a single node to reduce graph size
+            let mut data = 0.0;
+            let mut children = Vec::new();
+            
             for (xi, wi) in x.iter().zip(wo.iter()) {
-                let prod = mul(xi, wi);
-                sum = add(&sum, &prod);
+                data += xi.borrow().data * wi.borrow().data;
+                children.push((xi.clone(), wi.borrow().data));
+                children.push((wi.clone(), xi.borrow().data));
             }
-            sum
+            
+            Value::with_children(data, children)
         })
         .collect()
 }
@@ -226,12 +224,8 @@ fn softmax(logits: &[ValueRef]) -> Vec<ValueRef> {
         total = add(&total, exp_val);
     }
     
-    exps.iter()
-        .map(|e| {
-            let inv_total = pow(&total, -1.0);
-            mul(e, &inv_total)
-        })
-        .collect()
+    let inv_total = pow(&total, -1.0);
+    exps.iter().map(|e| mul(e, &inv_total)).collect()
 }
 
 fn rmsnorm(x: &[ValueRef]) -> Vec<ValueRef> {
@@ -243,11 +237,10 @@ fn rmsnorm(x: &[ValueRef]) -> Vec<ValueRef> {
     }
     let n_id = Value::new(n);
     ms = mul(&ms, &pow(&n_id, -1.0));
-    
     let eps_id = Value::new(1e-5);
     ms = add(&ms, &eps_id);
     let scale = pow(&ms, -0.5);
-    
+
     x.iter().map(|xi| mul(xi, &scale)).collect()
 }
 
@@ -367,6 +360,28 @@ fn reset_all_grads(params: &[ValueRef]) {
     }
 }
 
+fn count_graph_nodes(v: &ValueRef) -> usize {
+    let mut visited = std::collections::HashSet::new();
+    let mut count = 0;
+    
+    fn traverse(v: &ValueRef, visited: &mut std::collections::HashSet<usize>, count: &mut usize) {
+        let ptr = v.as_ptr() as usize;
+        if !visited.contains(&ptr) {
+            visited.insert(ptr);
+            *count += 1;
+            let v_borrow = v.borrow();
+            let children = v_borrow.children.clone();
+            drop(v_borrow);
+            for (child, _) in children {
+                traverse(&child, visited, count);
+            }
+        }
+    }
+    
+    traverse(v, &mut visited, &mut count);
+    count
+}
+
 fn main() {
     download_names().expect("Failed to download dataset");
     let docs = load_docs();
@@ -417,6 +432,13 @@ fn main() {
     let mut m = vec![0.0; num_params];
     let mut v = vec![0.0; num_params];
 
+    let mut total_forward = 0.0;
+    let mut total_backward = 0.0;
+    let mut total_softmax = 0.0;
+    let mut total_linear = 0.0;
+    let mut total_update = 0.0;
+    let mut total_graph_size = 0usize;
+
     for step in 0..NUM_STEPS {
         reset_all_grads(&params);
 
@@ -435,16 +457,21 @@ fn main() {
         let mut values = vec![vec![]; N_LAYER];
         let mut losses = Vec::new();
 
+        let t_forward = Instant::now();
         for pos_id in 0..n {
             let token_id = tokens[pos_id];
             let target_id = tokens[pos_id + 1];
 
             let logits = gpt(token_id, pos_id, &mut keys, &mut values, &state_dict);
+            let t_softmax = Instant::now();
             let probs = softmax(&logits);
+            total_softmax += t_softmax.elapsed().as_secs_f64();
+            
             let loss_t = log(&probs[target_id]);
             let neg_loss = mul(&loss_t, &Value::new(-1.0));
             losses.push(neg_loss);
         }
+        total_forward += t_forward.elapsed().as_secs_f64();
 
         let mut loss = Value::new(0.0);
         for loss_id in &losses {
@@ -454,10 +481,14 @@ fn main() {
         loss = mul(&loss, &pow(&n_id, -1.0));
 
         let loss_data = loss.borrow().data;
+        
+        let t_backward = Instant::now();
         backward(&loss);
+        total_backward += t_backward.elapsed().as_secs_f64();
 
         let lr_t = LEARNING_RATE * (1.0 - step as f64 / NUM_STEPS as f64);
 
+        let t_update = Instant::now();
         for (i, param) in params.iter().enumerate() {
             let grad = param.borrow().grad;
             m[i] = BETA1 * m[i] + (1.0 - BETA1) * grad;
@@ -469,12 +500,24 @@ fn main() {
             let update = lr_t * m_hat / (v_hat.sqrt() + EPS_ADAM);
             param.borrow_mut().data -= update;
         }
+        total_update += t_update.elapsed().as_secs_f64();
+
+        if step == 0 {
+            total_graph_size = count_graph_nodes(&loss);
+        }
 
         if (step + 1) % 100 == 0 || step == 0 {
             print!("step {:4} / {} | loss {:.4}\r", step + 1, NUM_STEPS, loss_data);
             std::io::stdout().flush().unwrap();
         }
     }
+
+    println!("\n--- Profiling Results ---");
+    println!("Forward pass:  {:.2}s ({:.1}%)", total_forward, total_forward / (total_forward + total_backward + total_update) * 100.0);
+    println!("Backward pass: {:.2}s ({:.1}%)", total_backward, total_backward / (total_forward + total_backward + total_update) * 100.0);
+    println!("Softmax:       {:.2}s ({:.1}%)", total_softmax, total_softmax / (total_forward + total_backward + total_update) * 100.0);
+    println!("Param update:  {:.2}s ({:.1}%)", total_update, total_update / (total_forward + total_backward + total_update) * 100.0);
+    println!("Avg graph size: {} nodes", total_graph_size);
 
     println!("\n--- inference (new, hallucinated names) ---");
 
