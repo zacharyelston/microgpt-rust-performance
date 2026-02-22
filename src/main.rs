@@ -1,4 +1,6 @@
 use rand::Rng;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -13,7 +15,34 @@ const N_EMBD: usize = 16;
 const BLOCK_SIZE: usize = 16;
 const N_HEAD: usize = 4;
 const HEAD_DIM: usize = N_EMBD / N_HEAD;
-const _TEMPERATURE: f64 = 0.5;
+const TEMPERATURE: f64 = 0.5;
+
+type ValueRef = Rc<RefCell<Value>>;
+
+#[derive(Clone)]
+struct Value {
+    data: f64,
+    grad: f64,
+    children: Vec<(ValueRef, f64)>,
+}
+
+impl Value {
+    fn new(data: f64) -> ValueRef {
+        Rc::new(RefCell::new(Value {
+            data,
+            grad: 0.0,
+            children: Vec::new(),
+        }))
+    }
+
+    fn with_children(data: f64, children: Vec<(ValueRef, f64)>) -> ValueRef {
+        Rc::new(RefCell::new(Value {
+            data,
+            grad: 0.0,
+            children,
+        }))
+    }
+}
 
 fn download_names() -> std::io::Result<()> {
     if fs::metadata("input.txt").is_ok() {
@@ -30,6 +59,96 @@ fn download_names() -> std::io::Result<()> {
     let mut file = fs::File::create("input.txt")?;
     file.write_all(response.as_bytes())?;
     Ok(())
+}
+
+fn add(a: &ValueRef, b: &ValueRef) -> ValueRef {
+    let a_val = a.borrow();
+    let b_val = b.borrow();
+    let data = a_val.data + b_val.data;
+    drop(a_val);
+    drop(b_val);
+    Value::with_children(data, vec![(a.clone(), 1.0), (b.clone(), 1.0)])
+}
+
+fn mul(a: &ValueRef, b: &ValueRef) -> ValueRef {
+    let a_val = a.borrow();
+    let b_val = b.borrow();
+    let data = a_val.data * b_val.data;
+    let local_grad_a = b_val.data;
+    let local_grad_b = a_val.data;
+    drop(a_val);
+    drop(b_val);
+    Value::with_children(data, vec![(a.clone(), local_grad_a), (b.clone(), local_grad_b)])
+}
+
+fn pow(a: &ValueRef, exp: f64) -> ValueRef {
+    let a_val = a.borrow();
+    let data = a_val.data.powf(exp);
+    let local_grad = exp * a_val.data.powf(exp - 1.0);
+    drop(a_val);
+    Value::with_children(data, vec![(a.clone(), local_grad)])
+}
+
+fn log(a: &ValueRef) -> ValueRef {
+    let a_val = a.borrow();
+    let data = a_val.data.ln();
+    let local_grad = 1.0 / a_val.data;
+    drop(a_val);
+    Value::with_children(data, vec![(a.clone(), local_grad)])
+}
+
+fn exp(a: &ValueRef) -> ValueRef {
+    let a_val = a.borrow();
+    let data = a_val.data.exp();
+    let local_grad = data;
+    drop(a_val);
+    Value::with_children(data, vec![(a.clone(), local_grad)])
+}
+
+fn relu(a: &ValueRef) -> ValueRef {
+    let a_val = a.borrow();
+    let data = a_val.data.max(0.0);
+    let local_grad = if a_val.data > 0.0 { 1.0 } else { 0.0 };
+    drop(a_val);
+    Value::with_children(data, vec![(a.clone(), local_grad)])
+}
+
+fn backward(loss: &ValueRef) {
+    loss.borrow_mut().grad = 1.0;
+    
+    let mut topo = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    build_topo(loss, &mut topo, &mut visited);
+    
+    for node_ref in topo.iter().rev() {
+        let node = node_ref.borrow();
+        let node_grad = node.grad;
+        let children = node.children.clone();
+        drop(node);
+        
+        for (child_ref, local_grad) in children {
+            child_ref.borrow_mut().grad += local_grad * node_grad;
+        }
+    }
+}
+
+fn build_topo(v: &ValueRef, topo: &mut Vec<ValueRef>, visited: &mut std::collections::HashSet<usize>) {
+    let ptr = v.as_ptr() as usize;
+    if !visited.contains(&ptr) {
+        visited.insert(ptr);
+        let v_borrow = v.borrow();
+        let children = v_borrow.children.clone();
+        drop(v_borrow);
+        
+        for (child, _) in children {
+            build_topo(&child, topo, visited);
+        }
+        topo.push(v.clone());
+    }
+}
+
+fn reset_grad(v: &ValueRef) {
+    v.borrow_mut().grad = 0.0;
 }
 
 fn load_docs() -> Vec<String> {
@@ -59,7 +178,7 @@ fn build_vocab(docs: &[String]) -> (Vec<char>, usize) {
     (uchars, vocab_size)
 }
 
-fn init_matrix(nout: usize, nin: usize, std: f64, rng: &mut rand::rngs::ThreadRng) -> Vec<Vec<f64>> {
+fn init_matrix(nout: usize, nin: usize, std: f64, rng: &mut rand::rngs::ThreadRng) -> Vec<Vec<ValueRef>> {
     (0..nout)
         .map(|_| {
             (0..nin)
@@ -67,55 +186,88 @@ fn init_matrix(nout: usize, nin: usize, std: f64, rng: &mut rand::rngs::ThreadRn
                     let u1: f64 = rng.gen();
                     let u2: f64 = rng.gen();
                     let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
-                    z * std
+                    Value::new(z * std)
                 })
                 .collect()
         })
         .collect()
 }
 
-fn linear(x: &[f64], w: &[Vec<f64>]) -> Vec<f64> {
+fn linear(x: &[ValueRef], w: &[Vec<ValueRef>]) -> Vec<ValueRef> {
     w.iter()
         .map(|wo| {
-            x.iter()
-                .zip(wo.iter())
-                .map(|(xi, wi)| xi * wi)
-                .sum()
+            let mut sum = Value::new(0.0);
+            for (xi, wi) in x.iter().zip(wo.iter()) {
+                let prod = mul(xi, wi);
+                sum = add(&sum, &prod);
+            }
+            sum
         })
         .collect()
 }
 
-fn softmax(logits: &[f64]) -> Vec<f64> {
-    let max_val = logits.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let exps: Vec<f64> = logits.iter().map(|l| (l - max_val).exp()).collect();
-    let total: f64 = exps.iter().sum();
-    exps.iter().map(|e| e / total).collect()
+fn softmax(logits: &[ValueRef]) -> Vec<ValueRef> {
+    let max_val = logits
+        .iter()
+        .map(|l| l.borrow().data)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let max_id = Value::new(max_val);
+    
+    let exps: Vec<ValueRef> = logits
+        .iter()
+        .map(|l| {
+            let shifted = add(l, &mul(&max_id, &Value::new(-1.0)));
+            exp(&shifted)
+        })
+        .collect();
+    
+    let mut total = Value::new(0.0);
+    for exp_val in &exps {
+        total = add(&total, exp_val);
+    }
+    
+    exps.iter()
+        .map(|e| {
+            let inv_total = pow(&total, -1.0);
+            mul(e, &inv_total)
+        })
+        .collect()
 }
 
-fn rmsnorm(x: &[f64]) -> Vec<f64> {
+fn rmsnorm(x: &[ValueRef]) -> Vec<ValueRef> {
     let n = x.len() as f64;
-    let ms = x.iter().map(|xi| xi * xi).sum::<f64>() / n;
-    let scale = (ms + 1e-5).powf(-0.5);
-    x.iter().map(|xi| xi * scale).collect()
+    let mut ms = Value::new(0.0);
+    for xi in x {
+        let xi_sq = mul(xi, xi);
+        ms = add(&ms, &xi_sq);
+    }
+    let n_id = Value::new(n);
+    ms = mul(&ms, &pow(&n_id, -1.0));
+    
+    let eps_id = Value::new(1e-5);
+    ms = add(&ms, &eps_id);
+    let scale = pow(&ms, -0.5);
+    
+    x.iter().map(|xi| mul(xi, &scale)).collect()
 }
 
 fn gpt(
     token_id: usize,
     pos_id: usize,
-    keys: &mut Vec<Vec<Vec<f64>>>,
-    values: &mut Vec<Vec<Vec<f64>>>,
-    state_dict: &HashMap<String, Vec<Vec<f64>>>,
-) -> Vec<f64> {
+    keys: &mut Vec<Vec<Vec<ValueRef>>>,
+    values: &mut Vec<Vec<Vec<ValueRef>>>,
+    state_dict: &HashMap<String, Vec<Vec<ValueRef>>>,
+) -> Vec<ValueRef> {
     let wte = &state_dict["wte"];
     let wpe = &state_dict["wpe"];
 
-    let tok_emb = &wte[token_id];
-    let pos_emb = &wpe[pos_id];
+    let tok_emb = wte[token_id].clone();
+    let pos_emb = wpe[pos_id].clone();
 
-    let mut x: Vec<f64> = tok_emb
+    let mut x: Vec<ValueRef> = tok_emb
         .iter()
         .zip(pos_emb.iter())
-        .map(|(t, p)| t + p)
+        .map(|(t, p)| add(t, p))
         .collect();
 
     x = rmsnorm(&x);
@@ -135,25 +287,35 @@ fn gpt(
         for h in 0..N_HEAD {
             let hs = h * HEAD_DIM;
             let q_h = &q[hs..hs + HEAD_DIM];
-            let k_h: Vec<&[f64]> = keys[li].iter().map(|ki| &ki[hs..hs + HEAD_DIM]).collect();
-            let v_h: Vec<&[f64]> = values[li].iter().map(|vi| &vi[hs..hs + HEAD_DIM]).collect();
+            let k_h: Vec<Vec<ValueRef>> = keys[li]
+                .iter()
+                .map(|ki| ki[hs..hs + HEAD_DIM].to_vec())
+                .collect();
+            let v_h: Vec<Vec<ValueRef>> = values[li]
+                .iter()
+                .map(|vi| vi[hs..hs + HEAD_DIM].to_vec())
+                .collect();
 
             let mut attn_logits = Vec::new();
             for t in 0..k_h.len() {
-                let mut sum = 0.0;
+                let mut sum = Value::new(0.0);
                 for j in 0..HEAD_DIM {
-                    sum += q_h[j] * k_h[t][j];
+                    let prod = mul(&q_h[j], &k_h[t][j]);
+                    sum = add(&sum, &prod);
                 }
-                let logit = sum / (HEAD_DIM as f64).sqrt();
+                let head_dim_id = Value::new(HEAD_DIM as f64);
+                let sqrt_head_dim = pow(&head_dim_id, 0.5);
+                let logit = mul(&sum, &pow(&sqrt_head_dim, -1.0));
                 attn_logits.push(logit);
             }
 
             let attn_weights = softmax(&attn_logits);
 
             for j in 0..HEAD_DIM {
-                let mut head_out = 0.0;
+                let mut head_out = Value::new(0.0);
                 for t in 0..v_h.len() {
-                    head_out += attn_weights[t] * v_h[t][j];
+                    let prod = mul(&attn_weights[t], &v_h[t][j]);
+                    head_out = add(&head_out, &prod);
                 }
                 x_attn.push(head_out);
             }
@@ -163,35 +325,46 @@ fn gpt(
         x = x
             .iter()
             .zip(x_residual.iter())
-            .map(|(a, b)| a + b)
+            .map(|(a, b)| add(a, b))
             .collect();
 
         let x_residual = x.clone();
         x = rmsnorm(&x);
         x = linear(&x, &state_dict[&format!("layer{}.mlp_fc1", li)]);
-        x = x.iter().map(|xi| xi.max(0.0)).collect();
+        x = x.iter().map(|xi| relu(xi)).collect();
         x = linear(&x, &state_dict[&format!("layer{}.mlp_fc2", li)]);
         x = x
             .iter()
             .zip(x_residual.iter())
-            .map(|(a, b)| a + b)
+            .map(|(a, b)| add(a, b))
             .collect();
     }
 
     linear(&x, &state_dict["lm_head"])
 }
 
-fn compute_loss_and_grads(
-    logits: &[f64],
-    target_id: usize,
-) -> (f64, Vec<f64>) {
-    let probs = softmax(logits);
-    let loss = -probs[target_id].ln();
-    
-    let mut grad_logits = probs.clone();
-    grad_logits[target_id] -= 1.0;
-    
-    (loss, grad_logits)
+fn collect_params(state_dict: &HashMap<String, Vec<Vec<ValueRef>>>) -> Vec<ValueRef> {
+    let mut params = Vec::new();
+    for key in [
+        "wte", "wpe", "lm_head",
+        "layer0.attn_wq", "layer0.attn_wk", "layer0.attn_wv", "layer0.attn_wo",
+        "layer0.mlp_fc1", "layer0.mlp_fc2",
+    ].iter() {
+        if let Some(matrix) = state_dict.get(*key) {
+            for row in matrix {
+                for param in row {
+                    params.push(param.clone());
+                }
+            }
+        }
+    }
+    params
+}
+
+fn reset_all_grads(params: &[ValueRef]) {
+    for param in params {
+        reset_grad(param);
+    }
 }
 
 fn main() {
@@ -237,13 +410,16 @@ fn main() {
         );
     }
 
-    let num_params: usize = state_dict.values().map(|m| m.len() * m[0].len()).sum();
+    let params = collect_params(&state_dict);
+    let num_params = params.len();
     println!("num params: {}", num_params);
 
     let mut m = vec![0.0; num_params];
     let mut v = vec![0.0; num_params];
 
     for step in 0..NUM_STEPS {
+        reset_all_grads(&params);
+
         let doc = &docs[step % docs.len()];
         let mut tokens = vec![bos];
         for ch in doc.chars() {
@@ -257,40 +433,45 @@ fn main() {
 
         let mut keys = vec![vec![]; N_LAYER];
         let mut values = vec![vec![]; N_LAYER];
-        let mut total_loss = 0.0;
+        let mut losses = Vec::new();
 
         for pos_id in 0..n {
             let token_id = tokens[pos_id];
             let target_id = tokens[pos_id + 1];
 
             let logits = gpt(token_id, pos_id, &mut keys, &mut values, &state_dict);
-            let (loss, _grad_logits) = compute_loss_and_grads(&logits, target_id);
-            total_loss += loss;
+            let probs = softmax(&logits);
+            let loss_t = log(&probs[target_id]);
+            let neg_loss = mul(&loss_t, &Value::new(-1.0));
+            losses.push(neg_loss);
         }
 
-        total_loss /= n as f64;
+        let mut loss = Value::new(0.0);
+        for loss_id in &losses {
+            loss = add(&loss, loss_id);
+        }
+        let n_id = Value::new(n as f64);
+        loss = mul(&loss, &pow(&n_id, -1.0));
+
+        let loss_data = loss.borrow().data;
+        backward(&loss);
 
         let lr_t = LEARNING_RATE * (1.0 - step as f64 / NUM_STEPS as f64);
 
-        let mut param_idx = 0;
-        for (_key, matrix) in state_dict.iter_mut() {
-            for row in matrix.iter_mut() {
-                for param in row.iter_mut() {
-                    let grad = (rng.gen::<f64>() - 0.5) * 0.01;
-                    m[param_idx] = BETA1 * m[param_idx] + (1.0 - BETA1) * grad;
-                    v[param_idx] = BETA2 * v[param_idx] + (1.0 - BETA2) * grad * grad;
+        for (i, param) in params.iter().enumerate() {
+            let grad = param.borrow().grad;
+            m[i] = BETA1 * m[i] + (1.0 - BETA1) * grad;
+            v[i] = BETA2 * v[i] + (1.0 - BETA2) * grad * grad;
 
-                    let m_hat = m[param_idx] / (1.0 - BETA1.powi((step + 1) as i32));
-                    let v_hat = v[param_idx] / (1.0 - BETA2.powi((step + 1) as i32));
+            let m_hat = m[i] / (1.0 - BETA1.powi((step + 1) as i32));
+            let v_hat = v[i] / (1.0 - BETA2.powi((step + 1) as i32));
 
-                    *param -= lr_t * m_hat / (v_hat.sqrt() + EPS_ADAM);
-                    param_idx += 1;
-                }
-            }
+            let update = lr_t * m_hat / (v_hat.sqrt() + EPS_ADAM);
+            param.borrow_mut().data -= update;
         }
 
         if (step + 1) % 100 == 0 || step == 0 {
-            print!("step {:4} / {} | loss {:.4}\r", step + 1, NUM_STEPS, total_loss);
+            print!("step {:4} / {} | loss {:.4}\r", step + 1, NUM_STEPS, loss_data);
             std::io::stdout().flush().unwrap();
         }
     }
@@ -306,11 +487,12 @@ fn main() {
         for pos_id in 0..BLOCK_SIZE {
             let logits = gpt(token_id, pos_id, &mut keys, &mut values, &state_dict);
             let probs = softmax(&logits);
+            let prob_vals: Vec<f64> = probs.iter().map(|p| p.borrow().data).collect();
 
             let mut cumsum = 0.0;
             let rand_val: f64 = rng.gen();
             token_id = 0;
-            for (i, &p) in probs.iter().enumerate() {
+            for (i, &p) in prob_vals.iter().enumerate() {
                 cumsum += p;
                 if rand_val < cumsum {
                     token_id = i;
