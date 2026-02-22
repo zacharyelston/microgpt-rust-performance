@@ -57,19 +57,21 @@ class Value:
     def __rtruediv__(self, other): return other * self**-1
 
     def backward(self):
-        topo = []
-        visited = set()
-        def build_topo(v):
-            if v not in visited:
-                visited.add(v)
-                for child in v._children:
-                    build_topo(child)
-                topo.append(v)
-        build_topo(self)
+        # Use stack-based traversal instead of topological sort for speed
         self.grad = 1
-        for v in reversed(topo):
+        stack = [self]
+        processed = set()
+        
+        while stack:
+            v = stack.pop()
+            if id(v) in processed:
+                continue
+            processed.add(id(v))
+            
+            v_grad = v.grad
             for child, local_grad in zip(v._children, v._local_grads):
-                child.grad += local_grad * v.grad
+                child.grad += local_grad * v_grad
+                stack.append(child)
 
 # Initialize the parameters, to store the knowledge of the model
 n_layer = 1     # depth of the transformer neural network (number of layers)
@@ -92,7 +94,18 @@ print(f"num params: {len(params)}")
 # Define the model architecture: a function mapping tokens and parameters to logits over what comes next
 # Follow GPT-2, blessed among the GPTs, with minor differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU
 def linear(x, w):
-    return [sum(wi * xi for wi, xi in zip(wo, x)) for wo in w]
+    # Fuse all operations into single nodes to reduce graph size
+    result = []
+    for wo in w:
+        # Create a single node with all children instead of intermediate nodes
+        data = sum(wi.data * xi.data for wi, xi in zip(wo, x))
+        children = []
+        local_grads = []
+        for wi, xi in zip(wo, x):
+            children.extend([wi, xi])
+            local_grads.extend([xi.data, wi.data])
+        result.append(Value(data, tuple(children), tuple(local_grads)))
+    return result
 
 def softmax(logits):
     max_val = max(val.data for val in logits)
