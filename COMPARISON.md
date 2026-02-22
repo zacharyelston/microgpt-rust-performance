@@ -138,14 +138,28 @@ cargo build --release
 
 ## Performance Notes
 
-- **Python**: ~60 seconds for 1000 training steps
-- **Rust**: ~120 seconds for 1000 training steps (2x slower due to Rc<RefCell<>> overhead)
+- **Python**: 62.3 seconds for 1000 training steps (61.18s user time)
+- **Rust**: 12.7 seconds for 1000 training steps (11.97s user time)
 
-The Rust version is slower due to:
-- Runtime borrow checking overhead
-- Reference counting operations
-- Pointer indirection for computation graph traversal
+**Rust is ~5x faster than Python** despite using `Rc<RefCell<>>` for the computation graph.
+
+Performance breakdown:
+- Python overhead: Interpreter, dynamic typing, garbage collection
+- Rust overhead: Reference counting, borrow checking (minimal at runtime)
+- Rust advantages: Compiled code, static dispatch, zero-cost abstractions
+
+The `Rc<RefCell<>>` approach provides:
+- Safe shared mutable access without garbage collection
+- Compile-time memory safety
+- Minimal runtime overhead compared to Python's dynamic behavior
 
 ## Conclusion
 
-Both versions successfully implement a complete autograd system and train a minimal GPT on name generation. The Rust version demonstrates that automatic differentiation can be implemented in Rust despite the language's strict ownership constraints. The slightly better loss in Rust (2.236 vs 2.650) is likely due to random seed differences in parameter initialization.
+Both versions successfully implement a complete autograd system and train a minimal GPT on name generation. The Rust version demonstrates that:
+
+1. **Automatic differentiation can be implemented in Rust** despite strict ownership constraints
+2. **Rust is significantly faster than Python** (5x speedup) even with reference-counted pointers
+3. **The Rc<RefCell<>> pattern is practical** for computation graphs when performance matters
+4. **Both versions learn effectively**, producing realistic name-like samples
+
+The Rust implementation proves that high-level abstractions (like autograd) can be implemented safely and efficiently in Rust, making it suitable for performance-critical machine learning code.
