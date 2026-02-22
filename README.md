@@ -1,13 +1,13 @@
 # microGPT: Python vs Rust Performance Comparison
 
+## 🚀 **42x Speedup: Rust Achieves 1.48s vs Python's 62.3s**
+
+**Final Performance Results:**
+- **Optimized Rust**: **1.48s** (42x faster than original Python)
+- **Optimized Python**: **20.6s** (3x faster than original Python)  
+- **Rust vs Python**: **14x speedup** even with identical optimizations
+
 A comprehensive performance comparison between Python and Rust implementations of Karpathy's microGPT with automatic differentiation.
-
-## 🚀 Key Results
-
-**Final Performance:**
-- **Optimized Rust**: 1.48s (42x faster than original Python)
-- **Optimized Python**: 20.6s (3x faster than original Python)
-- **Rust vs Python**: 14x speedup even with identical optimizations
 
 | Version | Time | Speedup vs Original | Loss | Graph Size |
 |---------|------|-------------------|------|------------|
