@@ -1,20 +1,24 @@
 # microGPT: Python vs Rust Performance Comparison
 
-## 🚀 **42x Speedup: Rust Achieves 1.48s vs Python's 62.3s**
+## 🚀 **Rust vs Python Performance: Honest Comparison**
 
-**Final Performance Results:**
-- **Optimized Rust**: **1.48s** (42x faster than original Python)
-- **Optimized Python**: **20.6s** (3x faster than original Python)  
-- **Rust vs Python**: **14x speedup** even with identical optimizations
+**Fair Comparison (Same Algorithm):**
+- **Optimized Rust**: **1.48s** vs **Optimized Python**: **20.6s** = **14x speedup**
+
+**Overall Results:**
+- **Original Python**: 62.3s (68K graph nodes)
+- **Optimized Python**: 20.6s (6K graph nodes) 
+- **Original Rust**: 12.7s (68K graph nodes)
+- **Optimized Rust**: 1.48s (6K graph nodes)
 
 A comprehensive performance comparison between Python and Rust implementations of Karpathy's microGPT with automatic differentiation.
 
-| Version | Time | Speedup vs Original | Loss | Graph Size |
-|---------|------|-------------------|------|------------|
-| Original Python | 62.3s | 1x | 2.6497 | ~68k nodes |
-| Optimized Python | 20.6s | 3.0x | 2.6391 | ~6k nodes |
-| Original Rust | 12.7s | 4.9x | 2.2941 | ~68k nodes |
-| **Optimized Rust** | **1.48s** | **42x** | **2.4058** | **~6k nodes** |
+| Version | Time | Speedup | Loss | Graph Size |
+|---------|------|---------|------|------------|
+| Original Python | 62.3s | 1x baseline | 2.6497 | ~68k nodes |
+| Optimized Python | 20.6s | 3.0x vs original | 2.6391 | ~6k nodes |
+| Original Rust | 12.7s | 4.9x vs original | 2.2941 | ~68k nodes |
+| **Optimized Rust** | **1.48s** | **14x vs optimized Python** | **2.4058** | **~6k nodes** |
 
 ## 📁 Project Structure
 
