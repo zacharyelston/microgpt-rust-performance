@@ -1,10 +1,10 @@
 use rand::Rng;
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::{HashMap, HashSet}, ops::{Add, Mul, Neg, Sub}, rc::Rc, io::Write};
 use std::fs;
-use std::io::Write;
 use std::time::Instant;
+
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 const LEARNING_RATE: f64 = 0.01;
 const BETA1: f64 = 0.85;
@@ -26,6 +26,11 @@ struct Value {
     grad: f64,
     children: Vec<(ValueRef, f64)>,
 }
+
+#[cfg(feature = "parallel")]
+unsafe impl Send for Value {}
+#[cfg(feature = "parallel")]
+unsafe impl Sync for Value {}
 
 impl Value {
     fn new(data: f64) -> ValueRef {
@@ -52,13 +57,14 @@ fn download_names() -> std::io::Result<()> {
 
     println!("Downloading names dataset...");
     let url = "https://raw.githubusercontent.com/karpathy/makemore/988aa59/names.txt";
-    let response = reqwest::blocking::get(url)
-        .expect("Failed to download")
-        .text()
-        .expect("Failed to read response");
+    let _output = std::process::Command::new("curl")
+        .args(["-s", "-o", "input.txt", url])
+        .output()
+        .expect("Failed to download");
+    let text = fs::read_to_string("input.txt").expect("Failed to read input.txt");
     
     let mut file = fs::File::create("input.txt")?;
-    file.write_all(response.as_bytes())?;
+    file.write_all(text.as_bytes())?;
     Ok(())
 }
 
