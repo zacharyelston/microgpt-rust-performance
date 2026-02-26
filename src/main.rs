@@ -393,6 +393,22 @@ fn count_graph_nodes(v: &ValueRef) -> usize {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let (mut steps, mut lr, mut n_emb, mut n_head, mut n_layer, mut n_ctx, mut n_ff) = (NUM_STEPS, LEARNING_RATE, N_EMBD, N_HEAD, N_LAYER, BLOCK_SIZE, 4);
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-s" | "--steps" => { i += 1; if i < args.len() { steps = args[i].parse().unwrap_or(steps); } }
+            "-l" | "--lr" => { i += 1; if i < args.len() { lr = args[i].parse().unwrap_or(lr); } }
+            "-e" | "--emb" => { i += 1; if i < args.len() { n_emb = args[i].parse().unwrap_or(n_emb); } }
+            "-h" | "--head" => { i += 1; if i < args.len() { n_head = args[i].parse().unwrap_or(n_head); } }
+            "-y" | "--layer" => { i += 1; if i < args.len() { n_layer = args[i].parse().unwrap_or(n_layer); } }
+            "-c" | "--ctx" => { i += 1; if i < args.len() { n_ctx = args[i].parse().unwrap_or(n_ctx); } }
+            "-b" | "--batch" => { i += 1; if i < args.len() { n_ff = args[i].parse().unwrap_or(n_ff); } }
+            _ => {}
+        }
+        i += 1;
+    }
     download_names().expect("Failed to download dataset");
     let docs = load_docs();
     println!("num docs: {}", docs.len());
@@ -404,34 +420,34 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     let mut state_dict = HashMap::new();
-    state_dict.insert("wte".to_string(), init_matrix(vocab_size, N_EMBD, 0.08, &mut rng));
-    state_dict.insert("wpe".to_string(), init_matrix(BLOCK_SIZE, N_EMBD, 0.08, &mut rng));
-    state_dict.insert("lm_head".to_string(), init_matrix(vocab_size, N_EMBD, 0.08, &mut rng));
+    state_dict.insert("wte".to_string(), init_matrix(vocab_size, n_emb, 0.08, &mut rng));
+    state_dict.insert("wpe".to_string(), init_matrix(n_ctx, n_emb, 0.08, &mut rng));
+    state_dict.insert("lm_head".to_string(), init_matrix(vocab_size, n_emb, 0.08, &mut rng));
 
-    for i in 0..N_LAYER {
+    for i in 0..n_layer {
         state_dict.insert(
             format!("layer{}.attn_wq", i),
-            init_matrix(N_EMBD, N_EMBD, 0.08, &mut rng),
+            init_matrix(n_emb, n_emb, 0.08, &mut rng),
         );
         state_dict.insert(
             format!("layer{}.attn_wk", i),
-            init_matrix(N_EMBD, N_EMBD, 0.08, &mut rng),
+            init_matrix(n_emb, n_emb, 0.08, &mut rng),
         );
         state_dict.insert(
             format!("layer{}.attn_wv", i),
-            init_matrix(N_EMBD, N_EMBD, 0.08, &mut rng),
+            init_matrix(n_emb, n_emb, 0.08, &mut rng),
         );
         state_dict.insert(
             format!("layer{}.attn_wo", i),
-            init_matrix(N_EMBD, N_EMBD, 0.08, &mut rng),
+            init_matrix(n_emb, n_emb, 0.08, &mut rng),
         );
         state_dict.insert(
             format!("layer{}.mlp_fc1", i),
-            init_matrix(4 * N_EMBD, N_EMBD, 0.08, &mut rng),
+            init_matrix(4 * n_emb, n_emb, 0.08, &mut rng),
         );
         state_dict.insert(
             format!("layer{}.mlp_fc2", i),
-            init_matrix(N_EMBD, 4 * N_EMBD, 0.08, &mut rng),
+            init_matrix(n_emb, 4 * n_emb, 0.08, &mut rng),
         );
     }
 
@@ -454,12 +470,12 @@ fn main() {
     let mut patience_counter = 0;
     let mut best_step = 0;
 
-    for step in 0..NUM_STEPS {
+    for step in 0..steps {
         reset_all_grads(&params);
 
         // Mini-batch: process multiple documents per step
-        let start_idx = (step * BATCH_SIZE) % docs.len();
-        let batch_docs: Vec<String> = (0..BATCH_SIZE)
+        let start_idx = (step * n_ff) % docs.len();
+        let batch_docs: Vec<String> = (0..n_ff)
             .map(|i| docs[(start_idx + i) % docs.len()].clone())
             .collect();
 
@@ -474,10 +490,10 @@ fn main() {
             }
             tokens.push(bos);
 
-            let n = std::cmp::min(BLOCK_SIZE, tokens.len() - 1);
+            let n = std::cmp::min(n_ctx, tokens.len() - 1);
 
-            let mut keys = vec![vec![]; N_LAYER];
-            let mut values = vec![vec![]; N_LAYER];
+            let mut keys = vec![vec![]; n_layer];
+            let mut values = vec![vec![]; n_layer];
             let mut losses = Vec::new();
 
             let t_forward = Instant::now();
@@ -508,7 +524,7 @@ fn main() {
         }
 
         // Average batch loss
-        let batch_size_id = Value::new(BATCH_SIZE as f64);
+        let batch_size_id = Value::new(n_ff as f64);
         batch_loss = mul(&batch_loss, &pow(&batch_size_id, -1.0));
 
         let loss_data = batch_loss.borrow().data;
@@ -518,8 +534,8 @@ fn main() {
         total_backward += t_backward.elapsed().as_secs_f64();
 
         // Cosine annealing learning rate schedule
-        let cosine_factor = 0.5 * (1.0 + (step as f64 * PI / NUM_STEPS as f64).cos());
-        let lr_t = MIN_LR + (LEARNING_RATE - MIN_LR) * cosine_factor;
+        let cosine_factor = 0.5 * (1.0 + (step as f64 * PI / steps as f64).cos());
+        let lr_t = MIN_LR + (lr - MIN_LR) * cosine_factor;
 
         let t_update = Instant::now();
         for (i, param) in params.iter().enumerate() {
@@ -550,7 +566,7 @@ fn main() {
 
         if (step + 1) % 100 == 0 || step == 0 {
             print!("step {:4} / {} | loss {:.4} | lr {:.6} | patience {}/{}\r", 
-                   step + 1, NUM_STEPS, loss_data, lr_t, patience_counter, PATIENCE);
+                   step + 1, steps, loss_data, lr_t, patience_counter, PATIENCE);
             std::io::stdout().flush().unwrap();
         }
 
@@ -573,12 +589,12 @@ fn main() {
     println!("\n--- inference (new, hallucinated names) ---");
 
     for sample_idx in 0..20 {
-        let mut keys = vec![vec![]; N_LAYER];
-        let mut values = vec![vec![]; N_LAYER];
+        let mut keys = vec![vec![]; n_layer];
+        let mut values = vec![vec![]; n_layer];
         let mut token_id = bos;
         let mut sample = String::new();
 
-        for pos_id in 0..BLOCK_SIZE {
+        for pos_id in 0..n_ctx {
             let logits = gpt(token_id, pos_id, &mut keys, &mut values, &state_dict);
             let probs = softmax(&logits);
             let prob_vals: Vec<f64> = probs.iter().map(|p| p.borrow().data).collect();
