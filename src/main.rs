@@ -6,6 +6,43 @@
 use rand::Rng;
 use std::{cell::RefCell, collections::HashSet, ops::{Add, Mul, Neg, Sub}, rc::Rc, io::Write};
 
+// --- 0. The Configuration ---
+
+struct Config {
+    // Model
+    n_emb: usize,
+    n_ctx: usize,
+    n_layer: usize,
+    
+    // Training
+    steps: usize,
+    lr: f64,
+    adam_beta1: f64,
+    adam_beta2: f64,
+    adam_eps: f64,
+    checkpoint_interval: usize,
+
+    // Data
+    input_file: &'static str,
+    input_url: &'static str,
+}
+
+const CFG: Config = Config {
+    n_emb: 16,
+    n_ctx: 16,
+    n_layer: 1,
+    
+    steps: 200,
+    lr: 0.01,
+    adam_beta1: 0.9,
+    adam_beta2: 0.999,
+    adam_eps: 1e-8,
+    checkpoint_interval: 20,
+
+    input_file: "input.txt",
+    input_url: "https://raw.githubusercontent.com/karpathy/makemore/master/names.txt",
+};
+
 // --- I. The Atom: Value & Autograd ---
 
 #[derive(Clone)]
@@ -173,30 +210,28 @@ impl GPT {
 // --- IV. The Training Loop ---
 
 fn main() {
-    if std::fs::metadata("input.txt").is_err() {
-        let _ = std::process::Command::new("curl").args(["-o", "input.txt", "https://raw.githubusercontent.com/karpathy/makemore/master/names.txt"]).output();
+    if std::fs::metadata(CFG.input_file).is_err() {
+        let _ = std::process::Command::new("curl").args(["-o", CFG.input_file, CFG.input_url]).output();
     }
-    let raw = std::fs::read_to_string("input.txt").unwrap_or_else(|_| "emma\nolivia\nava\n".to_string());
+    let raw = std::fs::read_to_string(CFG.input_file).unwrap_or_else(|_| "emma\nolivia\nava\n".to_string());
     let chars: Vec<char> = { let mut c: Vec<_> = raw.chars().collect::<HashSet<_>>().into_iter().filter(|c| !c.is_whitespace()).collect(); c.sort(); c };
     let vocab = chars.len() + 1;
-    let (n_emb, n_ctx, n_layer) = (16, 16, 1);
     
-    let model = GPT::new(vocab, n_ctx, n_emb, n_layer);
+    let model = GPT::new(vocab, CFG.n_ctx, CFG.n_emb, CFG.n_layer);
     let params = model.params();
     println!("MicroGPT: {} params", params.len());
     
     let (mut m, mut v) = (vec![0.; params.len()], vec![0.; params.len()]);
-    let (steps, lr) = (200, 0.01);
     let docs: Vec<&str> = raw.lines().collect();
     
-    for step in 0..steps {
+    for step in 0..CFG.steps {
         let doc = docs[step % docs.len()];
         let tokens: Vec<usize> = std::iter::once(vocab-1)
             .chain(doc.chars().map(|c| chars.iter().position(|&x| x == c).unwrap()))
             .chain(std::iter::once(vocab-1)).collect();
 
         let mut loss = Val::new(0.);
-        let (mut kc, mut vc) = (vec![vec![]; n_layer], vec![vec![]; n_layer]);
+        let (mut kc, mut vc) = (vec![vec![]; CFG.n_layer], vec![vec![]; CFG.n_layer]);
         
         for p in 0..tokens.len()-1 {
             let logits = model.forward(tokens[p], p, &mut kc, &mut vc);
@@ -209,24 +244,24 @@ fn main() {
         for p in &params { p.zero(); }
         loss.backward();
 
-        let lr_t = lr * (1. - step as f64 / steps as f64);
+        let lr_t = CFG.lr * (1. - step as f64 / CFG.steps as f64);
         for (i, p) in params.iter().enumerate() {
             let g = p.grad();
-            m[i] = 0.85 * m[i] + 0.15 * g;
-            v[i] = 0.99 * v[i] + 0.01 * g * g;
-            let m_hat = m[i] / (1. - 0.85f64.powi(step as i32 + 1));
-            let v_hat = v[i] / (1. - 0.99f64.powi(step as i32 + 1));
-            p.0.borrow_mut().data -= lr_t * m_hat / (v_hat.sqrt() + 1e-8);
+            m[i] = CFG.adam_beta1 * m[i] + (1. - CFG.adam_beta1) * g;
+            v[i] = CFG.adam_beta2 * v[i] + (1. - CFG.adam_beta2) * g * g;
+            let m_hat = m[i] / (1. - CFG.adam_beta1.powi(step as i32 + 1));
+            let v_hat = v[i] / (1. - CFG.adam_beta2.powi(step as i32 + 1));
+            p.0.borrow_mut().data -= lr_t * m_hat / (v_hat.sqrt() + CFG.adam_eps);
         }
-        if step % 20 == 0 { print!("step {:4} | loss {:.4}\r", step, loss_val); std::io::stdout().flush().unwrap(); }
+        if step % CFG.checkpoint_interval == 0 { print!("step {:4} | loss {:.4}\r", step, loss_val); std::io::stdout().flush().unwrap(); }
     }
     
     println!("\n--- Generation ---");
     for _ in 0..5 {
-        let (mut kc, mut vc) = (vec![vec![]; n_layer], vec![vec![]; n_layer]);
+        let (mut kc, mut vc) = (vec![vec![]; CFG.n_layer], vec![vec![]; CFG.n_layer]);
         let mut tok = vocab - 1;
         print!("> ");
-        for p in 0..n_ctx {
+        for p in 0..CFG.n_ctx {
             let logits = model.forward(tok, p, &mut kc, &mut vc);
             let probs = softmax(&logits);
             let mut c = 0.;

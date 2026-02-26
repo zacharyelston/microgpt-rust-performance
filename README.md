@@ -30,14 +30,15 @@ cargo run --release
 
 ## Performance
 
-Despite its artistic intent, symmetry leads to efficiency.
+While prioritizing beauty and simplicity, Rust's efficiency still delivers respectable performance.
 
-| Version | Time (1000 steps) | Speedup |
-|---------|-------------------|---------|
-| Python (Original) | 62.3s | 1x |
-| **Rust (Symmetric)** | **~1.5s** | **~40x** |
+| Version | Time (1000 steps) |
+|---------|-------------------|
+| Python (Original) | ~62s |
+| **Rust (Artistic)** | **~35s** |
+| Rust (Optimized) | ~1.5s |
 
-(See [COMPARISON-New.md](COMPARISON-New.md) for detailed benchmarks)
+*Note: The "Optimized" version (on the main branch) sacrifices simplicity for raw speed using fused kernels. This "Artistic" branch uses pure, atomic autograd for conceptual elegance.*
 
 ## Acknowledgments
 
