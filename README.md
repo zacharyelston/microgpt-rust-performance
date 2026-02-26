@@ -2,7 +2,7 @@
 
 > "Truth is the intersection of beauty and functionality."
 
-A minimalist, aesthetic implementation of a Transformer in Rust. This project is an exploration of **symmetry in systems**. By reducing the GPT architecture to its atomic components and defining their interactions through fundamental operators, we reveal the elegant mathematical structure underlying modern AI.
+A minimalist, aesthetic implementation of a Transformer in Rust. This project is an exploration of **symmetry in systems**, porting [Andrej Karpathy's microGPT](https://karpathy.github.io/2026/02/12/microgpt/) to Rust. By reducing the GPT architecture to its atomic components and defining their interactions through fundamental operators, we reveal the elegant mathematical structure underlying modern AI.
 
 ## The Philosophy
 
@@ -35,12 +35,29 @@ The GPT model itself is a study in fractal symmetry:
 
 ## Quick Start
 
-The entire implementation is ~240 lines of code in `src/main.rs` with zero ML dependencies.
+The entire core implementation is ~240 lines of code in `src/lib.rs` and `src/main.rs` with zero ML dependencies.
 
 ```bash
-# Build and run with default settings
+# Build and run the standard training loop
 cargo run --release
 ```
+
+## Evolutionary Engine
+
+This repository includes a parallel evolutionary engine that treats the MicroGPT configuration as "DNA". It evolves hyperparameters (embedding size, layers, heads, learning rate) to maximize the **aesthetic quality** of generated names (Flow, Symmetry, Creativity).
+
+The engine is written in pure Rust and uses `rayon` for parallel processing across all CPU cores.
+
+```bash
+# Run the evolutionary search
+cargo run --release --bin evolve
+```
+
+### Fitness Function
+The "Judge" evaluates generated names based on:
+1.  **Flow**: Pronounceability (alternating vowel/consonant patterns).
+2.  **Symmetry**: Palindromes and repeating sub-patterns.
+3.  **Creativity**: Penalty for memorizing training data; reward for novelty.
 
 ## Scaling & Parameter Sweeps
 
@@ -66,29 +83,8 @@ python3 analyze_param_scaling.py
 # Calculate "Return on Investment" (Loss drop per 1,000 units)
 python3 analyze_efficiency.py
 ```
-*   **Positive Return:** Learning efficiently.
-*   **Near Zero:** Diminishing returns.
-*   **Negative:** Degradation/Instability.
-
-### 3. CLI Reference
-You can manually run specific configurations:
-```bash
-./target/release/microgpt_rust --steps 5000 --ctx 64 --emb 128 --head 8 --layer 4
-```
-
-## Performance
-
-While prioritizing beauty and simplicity, Rust's efficiency still delivers respectable performance.
-
-| Version | Time (1000 steps) |
-|---------|-------------------|
-| Python (Original) | ~62s |
-| **Rust (Artistic)** | **~35s** |
-| Rust (Optimized) | ~1.5s |
-
-*Note: The "Optimized" version (on the main branch) sacrifices simplicity for raw speed using fused kernels. This "Artistic" branch uses pure, atomic autograd for conceptual elegance.*
 
 ## Acknowledgments
 
-- **Andrej Karpathy** for the original [microGPT](https://github.com/karpathy/microGPT).
+- **Andrej Karpathy** for the original [microGPT](https://github.com/karpathy/microGPT) and his [blog post](https://karpathy.github.io/2026/02/12/microgpt/).
 - **The Rust Language** for allowing high-level abstractions with low-level control.
