@@ -3,21 +3,24 @@ import random
 import json
 import time
 import sys
+import concurrent.futures
+import os
 from judge import evaluate_names
 
 # Configuration for Evolution
-POPULATION_SIZE = 6
-GENERATIONS = 5      # Reduced for interactive speed
-ELITISM = 2          # Number of top performers to keep
+POPULATION_SIZE = 12    # Increased since we have parallel processing
+GENERATIONS = 5
+ELITISM = 2
 MUTATION_RATE = 0.5
+MAX_WORKERS = os.cpu_count() # Use all available cores
 
 # Fixed constraints
-TRAIN_STEPS = 300    # Reduced to prevent timeouts on the unoptimized engine
+TRAIN_STEPS = 300
 INPUT_FILE = "input.txt"
 
 class Genome:
     def __init__(self, emb=None, head=None, layer=None, lr=None):
-        self.n_emb = emb if emb else random.choice([16, 24, 32]) # Kept small for performance
+        self.n_emb = emb if emb else random.choice([16, 24, 32])
         self.n_head = head if head else random.choice([2, 4])
         # Constraint: emb must be divisible by head
         if self.n_emb % self.n_head != 0:
@@ -69,21 +72,31 @@ class Genome:
             t_run = time.time() - t0
             
             if result.returncode != 0:
-                print(f"Error: {result.stderr}")
+                # print(f"Error: {result.stderr}") # Silence error for cleaner parallel output
                 return [], 0.0
                 
             lines = result.stdout.strip().split('\n')
             names = [l.strip() for l in lines if l.strip()]
             return names, t_run
         except subprocess.TimeoutExpired:
-            print("Timed out!")
             return [], 120.0
-        except Exception as e:
-            print(f"Exception: {e}")
+        except Exception:
             return [], 0.0
 
+def evaluate_one(individual):
+    """Helper function for parallel execution"""
+    # Skip if cached (though in parallel map we re-eval usually, or handle in loop)
+    # But for simplicity, we just run.
+    names, t_run = individual.run()
+    
+    t_judge_start = time.time()
+    score = evaluate_names(names)
+    t_judge = time.time() - t_judge_start
+    
+    return names, score, t_run, t_judge
+
 def run_evolution():
-    print(f"--- Starting Aesthetic Evolution (Pop: {POPULATION_SIZE}, Gens: {GENERATIONS}) ---")
+    print(f"--- Starting Aesthetic Evolution (Pop: {POPULATION_SIZE}, Gens: {GENERATIONS}, Workers: {MAX_WORKERS}) ---")
     
     # Initialize Population
     population = [Genome() for _ in range(POPULATION_SIZE)]
@@ -92,27 +105,31 @@ def run_evolution():
         print(f"\n=== Generation {gen+1}/{GENERATIONS} ===")
         gen_start = time.time()
         
-        # 1. Evaluate Fitness
-        for i, individual in enumerate(population):
-            print(f"Org {i+1}: {individual} ... ", end='', flush=True)
-            
-            # Skip evaluation if already evaluated (for elites)
-            if individual.fitness != 0.0 and individual.names:
-                print(f"(Cached) -> {individual.fitness:.4f}")
-                continue
-
-            names, t_run = individual.run()
-            
-            t_judge_start = time.time()
-            score = evaluate_names(names)
-            t_judge = time.time() - t_judge_start
-            
-            individual.fitness = score
-            individual.names = names
-            
-            print(f" Run: {t_run:.2f}s | Judge: {t_judge:.4f}s -> Score: {score:.4f}")
-            if names:
-                print(f"    Sample: {', '.join(names[:3])}")
+        # Prepare list for evaluation (filter out cached elites if needed, but easier to just eval all or track indices)
+        # We need to map only the ones that need evaluation
+        to_eval = []
+        indices = []
+        
+        for i, ind in enumerate(population):
+            if ind.fitness != 0.0 and ind.names:
+                print(f"Org {i+1}: {ind} ... (Cached) -> {ind.fitness:.4f}")
+            else:
+                to_eval.append(ind)
+                indices.append(i)
+        
+        if to_eval:
+            print(f"Evaluating {len(to_eval)} organisms in parallel...")
+            with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                results = list(executor.map(evaluate_one, to_eval))
+                
+            # Update population with results
+            for idx, (names, score, t_run, t_judge) in zip(indices, results):
+                ind = population[idx]
+                ind.names = names
+                ind.fitness = score
+                print(f"Org {idx+1}: {ind} ... Run: {t_run:.2f}s | Judge: {t_judge:.4f}s -> Score: {score:.4f}")
+                if names:
+                     print(f"    Sample: {', '.join(names[:3])}")
 
         gen_time = time.time() - gen_start
         print(f"--- Generation Time: {gen_time:.2f}s ---")
