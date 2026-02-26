@@ -229,6 +229,7 @@ impl GPT {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let (mut steps, mut lr, mut n_emb, mut n_head, mut n_layer, mut n_ctx, mut n_ff) = (CFG.steps, CFG.lr, CFG.n_emb, CFG.n_head, CFG.n_layer, CFG.n_ctx, CFG.n_ff_exp);
+    let mut silent = false;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -239,6 +240,7 @@ fn main() {
             "-y" | "--layer" => { i += 1; if i < args.len() { n_layer = args[i].parse().unwrap_or(n_layer); } }
             "-c" | "--ctx" => { i += 1; if i < args.len() { n_ctx = args[i].parse().unwrap_or(n_ctx); } }
             "-f" | "--ff" => { i += 1; if i < args.len() { n_ff = args[i].parse().unwrap_or(n_ff); } }
+            "--silent" => { silent = true; }
             _ => {}
         }
         i += 1;
@@ -253,7 +255,9 @@ fn main() {
     
     let model = GPT::new(vocab, n_ctx, n_emb, n_layer, n_head, n_ff);
     let params = model.params();
-    println!("MicroGPT: {} params, training for {} steps (lr={}, emb={}, head={}, layer={}, ctx={}, ff={})", params.len(), steps, lr, n_emb, n_head, n_layer, n_ctx, n_ff);
+    if !silent {
+        println!("MicroGPT: {} params, training for {} steps (lr={}, emb={}, head={}, layer={}, ctx={}, ff={})", params.len(), steps, lr, n_emb, n_head, n_layer, n_ctx, n_ff);
+    }
     
     let (mut m, mut v) = (vec![0.; params.len()], vec![0.; params.len()]);
     let docs: Vec<&str> = raw.lines().collect();
@@ -287,14 +291,14 @@ fn main() {
             let v_hat = v[i] / (1. - CFG.adam_beta2.powi(step as i32 + 1));
             p.0.borrow_mut().data -= lr_t * m_hat / (v_hat.sqrt() + CFG.adam_eps);
         }
-        if step % CFG.checkpoint_interval == 0 { print!("step {:4} | loss {:.4}\r", step, loss_val); std::io::stdout().flush().unwrap(); }
+        if !silent && step % CFG.checkpoint_interval == 0 { print!("step {:4} | loss {:.4}\r", step, loss_val); std::io::stdout().flush().unwrap(); }
     }
     
-    println!("\n--- Generation ---");
+    if !silent { println!("\n--- Generation ---"); }
     for _ in 0..CFG.gen_samples {
         let (mut kc, mut vc) = (vec![vec![]; n_layer], vec![vec![]; n_layer]);
         let mut tok = vocab - 1;
-        print!("> ");
+        if !silent { print!("> "); }
         for p in 0..n_ctx {
             let logits = model.forward(tok, p, &mut kc, &mut vc);
             let probs = softmax(&logits);
