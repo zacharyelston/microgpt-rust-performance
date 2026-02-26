@@ -2,6 +2,7 @@ use rand::Rng;
 use std::{cell::RefCell, collections::{HashMap, HashSet}, ops::{Add, Mul, Neg, Sub}, rc::Rc, io::Write};
 use std::fs;
 use std::time::Instant;
+use std::f64::consts::PI;
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -17,6 +18,9 @@ const BLOCK_SIZE: usize = 16;
 const N_HEAD: usize = 4;
 const HEAD_DIM: usize = N_EMBD / N_HEAD;
 const TEMPERATURE: f64 = 0.5;
+const BATCH_SIZE: usize = 4;  // Mini-batch size
+const PATIENCE: usize = 50;  // Early stopping patience
+const MIN_LR: f64 = 0.0001;  // Minimum learning rate
 
 type ValueRef = Rc<RefCell<Value>>;
 
@@ -445,54 +449,77 @@ fn main() {
     let mut total_update = 0.0;
     let mut total_graph_size = 0usize;
 
+    // Early stopping variables
+    let mut best_loss = f64::INFINITY;
+    let mut patience_counter = 0;
+    let mut best_step = 0;
+
     for step in 0..NUM_STEPS {
         reset_all_grads(&params);
 
-        let doc = &docs[step % docs.len()];
-        let mut tokens = vec![bos];
-        for ch in doc.chars() {
-            if let Some(idx) = uchars.iter().position(|&c| c == ch) {
-                tokens.push(idx);
+        // Mini-batch: process multiple documents per step
+        let start_idx = (step * BATCH_SIZE) % docs.len();
+        let batch_docs: Vec<String> = (0..BATCH_SIZE)
+            .map(|i| docs[(start_idx + i) % docs.len()].clone())
+            .collect();
+
+        let mut batch_loss = Value::new(0.0);
+
+        for doc in batch_docs {
+            let mut tokens = vec![bos];
+            for ch in doc.chars() {
+                if let Some(idx) = uchars.iter().position(|&c| c == ch) {
+                    tokens.push(idx);
+                }
             }
-        }
-        tokens.push(bos);
+            tokens.push(bos);
 
-        let n = std::cmp::min(BLOCK_SIZE, tokens.len() - 1);
+            let n = std::cmp::min(BLOCK_SIZE, tokens.len() - 1);
 
-        let mut keys = vec![vec![]; N_LAYER];
-        let mut values = vec![vec![]; N_LAYER];
-        let mut losses = Vec::new();
+            let mut keys = vec![vec![]; N_LAYER];
+            let mut values = vec![vec![]; N_LAYER];
+            let mut losses = Vec::new();
 
-        let t_forward = Instant::now();
-        for pos_id in 0..n {
-            let token_id = tokens[pos_id];
-            let target_id = tokens[pos_id + 1];
+            let t_forward = Instant::now();
+            for pos_id in 0..n {
+                let token_id = tokens[pos_id];
+                let target_id = tokens[pos_id + 1];
 
-            let logits = gpt(token_id, pos_id, &mut keys, &mut values, &state_dict);
-            let t_softmax = Instant::now();
-            let probs = softmax(&logits);
-            total_softmax += t_softmax.elapsed().as_secs_f64();
+                let logits = gpt(token_id, pos_id, &mut keys, &mut values, &state_dict);
+                let t_softmax = Instant::now();
+                let probs = softmax(&logits);
+                total_softmax += t_softmax.elapsed().as_secs_f64();
+                
+                let loss_t = log(&probs[target_id]);
+                let neg_loss = mul(&loss_t, &Value::new(-1.0));
+                losses.push(neg_loss);
+            }
+            total_forward += t_forward.elapsed().as_secs_f64();
+
+            let mut doc_loss = Value::new(0.0);
+            for loss_id in &losses {
+                doc_loss = add(&doc_loss, loss_id);
+            }
+            let n_id = Value::new(n as f64);
+            doc_loss = mul(&doc_loss, &pow(&n_id, -1.0));
             
-            let loss_t = log(&probs[target_id]);
-            let neg_loss = mul(&loss_t, &Value::new(-1.0));
-            losses.push(neg_loss);
+            // Accumulate batch loss
+            batch_loss = add(&batch_loss, &doc_loss);
         }
-        total_forward += t_forward.elapsed().as_secs_f64();
 
-        let mut loss = Value::new(0.0);
-        for loss_id in &losses {
-            loss = add(&loss, loss_id);
-        }
-        let n_id = Value::new(n as f64);
-        loss = mul(&loss, &pow(&n_id, -1.0));
+        // Average batch loss
+        let batch_size_id = Value::new(BATCH_SIZE as f64);
+        batch_loss = mul(&batch_loss, &pow(&batch_size_id, -1.0));
 
-        let loss_data = loss.borrow().data;
+        let loss_data = batch_loss.borrow().data;
         
         let t_backward = Instant::now();
-        backward(&loss);
+        backward(&batch_loss);
         total_backward += t_backward.elapsed().as_secs_f64();
 
-        let lr_t = LEARNING_RATE * (1.0 - step as f64 / NUM_STEPS as f64);
+        // Cosine annealing learning rate schedule
+        let cosine_factor = 0.5 * (1.0 + (step as f64 * PI / NUM_STEPS as f64).cos());
+        let lr_t = MIN_LR + (LEARNING_RATE - MIN_LR) * cosine_factor;
 
         let t_update = Instant::now();
         for (i, param) in params.iter().enumerate() {
@@ -509,12 +536,30 @@ fn main() {
         total_update += t_update.elapsed().as_secs_f64();
 
         if step == 0 {
-            total_graph_size = count_graph_nodes(&loss);
+            total_graph_size = count_graph_nodes(&batch_loss);
+        }
+
+        // Early stopping logic
+        if loss_data < best_loss {
+            best_loss = loss_data;
+            best_step = step;
+            patience_counter = 0;
+        } else {
+            patience_counter += 1;
         }
 
         if (step + 1) % 100 == 0 || step == 0 {
-            print!("step {:4} / {} | loss {:.4}\r", step + 1, NUM_STEPS, loss_data);
+            print!("step {:4} / {} | loss {:.4} | lr {:.6} | patience {}/{}\r", 
+                   step + 1, NUM_STEPS, loss_data, lr_t, patience_counter, PATIENCE);
             std::io::stdout().flush().unwrap();
+        }
+
+        // Early stopping check
+        if patience_counter >= PATIENCE {
+            println!("\n--- Early Stopped ---");
+            println!("No improvement for {} steps. Best loss: {:.4} at step {}", 
+                     PATIENCE, best_loss, best_step + 1);
+            break;
         }
     }
 
