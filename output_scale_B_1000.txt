@@ -1,8 +1,0 @@
-MicroGPT: 4192 params, training for 1000 steps (lr=0.005, emb=16, head=4, layer=1)
-step    0 | loss 3.3034step   20 | loss 3.0043step   40 | loss 2.5972step   60 | loss 2.2666step   80 | loss 2.6520step  100 | loss 2.8685step  120 | loss 2.6815step  140 | loss 2.5361step  160 | loss 2.2219step  180 | loss 2.3605step  200 | loss 3.1139step  220 | loss 2.0151step  240 | loss 2.7998step  260 | loss 2.5124step  280 | loss 2.7862step  300 | loss 1.5753step  320 | loss 1.7869step  340 | loss 2.3300step  360 | loss 2.5526step  380 | loss 1.9259step  400 | loss 2.3786step  420 | loss 1.9622step  440 | loss 2.3946step  460 | loss 2.2089step  480 | loss 2.7121step  500 | loss 1.8593step  520 | loss 2.5081step  540 | loss 1.8337step  560 | loss 1.7950step  580 | loss 1.7951step  600 | loss 2.3510step  620 | loss 3.1142step  640 | loss 2.3874step  660 | loss 3.0813step  680 | loss 1.3846step  700 | loss 1.5663step  720 | loss 1.6841step  740 | loss 1.5721step  760 | loss 2.4940step  780 | loss 1.9943step  800 | loss 2.0362step  820 | loss 1.8266step  840 | loss 2.0611step  860 | loss 1.9303step  880 | loss 2.6944step  900 | loss 2.9048step  920 | loss 1.9718step  940 | loss 1.9246step  960 | loss 2.0496step  980 | loss 2.5122
---- Generation ---
-> ryda
-> dehallyt
-> damany
-> tamia
-> kalels
