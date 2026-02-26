@@ -44,8 +44,8 @@ const CFG: Config = Config {
     n_ff_exp: 4,
     steps: 200,
     lr: 0.01,
-    adam_beta1: 0.9,
-    adam_beta2: 0.999,
+    adam_beta1: 0.85,
+    adam_beta2: 0.99,
     adam_eps: 1e-8,
     checkpoint_interval: 20,
 
