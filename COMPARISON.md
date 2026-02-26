@@ -2,7 +2,7 @@
 
 ## Overview
 This document compares two implementations of Karpathy's microGPT:
-- **Python version** (`microgpt.py`): Reference implementation.
+- **Python version** (Original `microgpt.py`): Reference implementation (see [original blog](https://karpathy.github.io/2026/02/12/microgpt/)).
 - **Rust version** (`src/main.rs`): Port using `Rc<RefCell<>>` for autograd.
 
 ## Performance Results
