@@ -13,6 +13,8 @@ struct Config {
     n_emb: usize,
     n_ctx: usize,
     n_layer: usize,
+    n_head: usize,
+    n_ff_exp: usize,
     
     // Training
     steps: usize,
@@ -21,6 +23,13 @@ struct Config {
     adam_beta2: f64,
     adam_eps: f64,
     checkpoint_interval: usize,
+
+    // Generation
+    gen_samples: usize,
+
+    // Constants
+    rms_eps: f64,
+    init_scale: f64,
 
     // Data
     input_file: &'static str,
@@ -31,13 +40,18 @@ const CFG: Config = Config {
     n_emb: 16,
     n_ctx: 16,
     n_layer: 1,
-    
+    n_head: 4,
+    n_ff_exp: 4,
     steps: 200,
     lr: 0.01,
     adam_beta1: 0.9,
     adam_beta2: 0.999,
     adam_eps: 1e-8,
     checkpoint_interval: 20,
+
+    gen_samples: 5,
+    rms_eps: 1e-5,
+    init_scale: 0.2,
 
     input_file: "input.txt",
     input_url: "https://raw.githubusercontent.com/karpathy/makemore/master/names.txt",
@@ -125,7 +139,7 @@ type Mat2 = Vec<Vec1>;
 
 fn mat(r: usize, c: usize) -> Mat2 {
     let mut rng = rand::thread_rng();
-    (0..r).map(|_| (0..c).map(|_| Val::new(rng.gen_range(-1.0..1.0) * 0.2)).collect()).collect()
+    (0..r).map(|_| (0..c).map(|_| Val::new(rng.gen_range(-1.0..1.0) * CFG.init_scale)).collect()).collect()
 }
 fn linear(x: &[Val], w: &Mat2) -> Vec1 {
     w.iter().map(|row| row.iter().zip(x).map(|(w, x)| w * x).fold(Val::new(0.), |a, b| a + b)).collect()
@@ -140,10 +154,11 @@ fn softmax(x: &[Val]) -> Vec1 {
 fn rmsnorm(x: &[Val]) -> Vec1 {
     let ss = x.iter().map(|v| v * v).fold(Val::new(0.), |a, b| a + b);
     let n = Val::new((x.len() as f64).recip());
-    let scale = (ss * &n + &Val::new(1e-5)).pow(-0.5);
+    let scale = (ss * &n + &Val::new(CFG.rms_eps)).pow(-0.5);
     x.iter().map(|v| v * &scale).collect()
 }
 
+#[allow(clippy::upper_case_acronyms)]
 struct GPT {
     wte: Mat2, wpe: Mat2, lm_head: Mat2,
     wq: Vec<Mat2>, wk: Vec<Mat2>, wv: Vec<Mat2>, wo: Vec<Mat2>,
@@ -156,7 +171,7 @@ impl GPT {
             wte: mat(v, d), wpe: mat(ctx, d), lm_head: mat(v, d),
             wq: (0..l).map(|_| mat(d, d)).collect(), wk: (0..l).map(|_| mat(d, d)).collect(),
             wv: (0..l).map(|_| mat(d, d)).collect(), wo: (0..l).map(|_| mat(d, d)).collect(),
-            fc1: (0..l).map(|_| mat(4*d, d)).collect(), fc2: (0..l).map(|_| mat(d, 4*d)).collect(),
+            fc1: (0..l).map(|_| mat(CFG.n_ff_exp*d, d)).collect(), fc2: (0..l).map(|_| mat(d, CFG.n_ff_exp*d)).collect(),
         }
     }
     
@@ -169,9 +184,9 @@ impl GPT {
         p
     }
 
-    fn forward(&self, t: usize, pos: usize, k: &mut Vec<Vec<Vec1>>, v: &mut Vec<Vec<Vec1>>) -> Vec1 {
+    fn forward(&self, t: usize, pos: usize, k: &mut [Vec<Vec1>], v: &mut [Vec<Vec1>]) -> Vec1 {
         let mut x: Vec1 = self.wte[t].iter().zip(&self.wpe[pos]).map(|(t, p)| t + p).collect();
-        let hd = x.len() / 4; 
+        let hd = x.len() / CFG.n_head; 
 
         for i in 0..self.wq.len() {
             let xn = rmsnorm(&x);
@@ -180,7 +195,7 @@ impl GPT {
             v[i].push(linear(&xn, &self.wv[i]));
             
             let mut att = vec![];
-            for h in 0..4 {
+            for h in 0..CFG.n_head {
                 let rng = h*hd..(h+1)*hd;
                 let q_h = &q_vec[rng.clone()];
                 let scale = Val::new((hd as f64).sqrt().recip());
@@ -257,7 +272,7 @@ fn main() {
     }
     
     println!("\n--- Generation ---");
-    for _ in 0..5 {
+    for _ in 0..CFG.gen_samples {
         let (mut kc, mut vc) = (vec![vec![]; CFG.n_layer], vec![vec![]; CFG.n_layer]);
         let mut tok = vocab - 1;
         print!("> ");
