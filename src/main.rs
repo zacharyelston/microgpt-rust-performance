@@ -43,7 +43,7 @@ const CFG: Config = Config {
     n_head: 4,
     n_ff_exp: 4,
     steps: 200,
-    lr: 0.01,
+    lr: 0.005,
     adam_beta1: 0.85,
     adam_beta2: 0.99,
     adam_eps: 1e-8,
@@ -51,7 +51,7 @@ const CFG: Config = Config {
 
     gen_samples: 5,
     rms_eps: 1e-5,
-    init_scale: 0.2,
+    init_scale: 0.1,
 
     input_file: "input.txt",
     input_url: "https://raw.githubusercontent.com/karpathy/makemore/master/names.txt",
@@ -163,15 +163,17 @@ struct GPT {
     wte: Mat2, wpe: Mat2, lm_head: Mat2,
     wq: Vec<Mat2>, wk: Vec<Mat2>, wv: Vec<Mat2>, wo: Vec<Mat2>,
     fc1: Vec<Mat2>, fc2: Vec<Mat2>,
+    n_head: usize,
 }
 
 impl GPT {
-    fn new(v: usize, ctx: usize, d: usize, l: usize) -> Self {
+    fn new(v: usize, ctx: usize, d: usize, l: usize, h: usize, ff: usize) -> Self {
         GPT {
             wte: mat(v, d), wpe: mat(ctx, d), lm_head: mat(v, d),
             wq: (0..l).map(|_| mat(d, d)).collect(), wk: (0..l).map(|_| mat(d, d)).collect(),
             wv: (0..l).map(|_| mat(d, d)).collect(), wo: (0..l).map(|_| mat(d, d)).collect(),
-            fc1: (0..l).map(|_| mat(CFG.n_ff_exp*d, d)).collect(), fc2: (0..l).map(|_| mat(d, CFG.n_ff_exp*d)).collect(),
+            fc1: (0..l).map(|_| mat(ff*d, d)).collect(), fc2: (0..l).map(|_| mat(d, ff*d)).collect(),
+            n_head: h,
         }
     }
     
@@ -186,7 +188,7 @@ impl GPT {
 
     fn forward(&self, t: usize, pos: usize, k: &mut [Vec<Vec1>], v: &mut [Vec<Vec1>]) -> Vec1 {
         let mut x: Vec1 = self.wte[t].iter().zip(&self.wpe[pos]).map(|(t, p)| t + p).collect();
-        let hd = x.len() / CFG.n_head; 
+        let hd = x.len() / self.n_head; 
 
         for i in 0..self.wq.len() {
             let xn = rmsnorm(&x);
@@ -195,7 +197,7 @@ impl GPT {
             v[i].push(linear(&xn, &self.wv[i]));
             
             let mut att = vec![];
-            for h in 0..CFG.n_head {
+            for h in 0..self.n_head {
                 let rng = h*hd..(h+1)*hd;
                 let q_h = &q_vec[rng.clone()];
                 let scale = Val::new((hd as f64).sqrt().recip());
@@ -225,6 +227,23 @@ impl GPT {
 // --- IV. The Training Loop ---
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let (mut steps, mut lr, mut n_emb, mut n_head, mut n_layer, mut n_ctx, mut n_ff) = (CFG.steps, CFG.lr, CFG.n_emb, CFG.n_head, CFG.n_layer, CFG.n_ctx, CFG.n_ff_exp);
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-s" | "--steps" => { i += 1; if i < args.len() { steps = args[i].parse().unwrap_or(steps); } }
+            "-l" | "--lr" => { i += 1; if i < args.len() { lr = args[i].parse().unwrap_or(lr); } }
+            "-e" | "--emb" => { i += 1; if i < args.len() { n_emb = args[i].parse().unwrap_or(n_emb); } }
+            "-h" | "--head" => { i += 1; if i < args.len() { n_head = args[i].parse().unwrap_or(n_head); } }
+            "-y" | "--layer" => { i += 1; if i < args.len() { n_layer = args[i].parse().unwrap_or(n_layer); } }
+            "-c" | "--ctx" => { i += 1; if i < args.len() { n_ctx = args[i].parse().unwrap_or(n_ctx); } }
+            "-f" | "--ff" => { i += 1; if i < args.len() { n_ff = args[i].parse().unwrap_or(n_ff); } }
+            _ => {}
+        }
+        i += 1;
+    }
+
     if std::fs::metadata(CFG.input_file).is_err() {
         let _ = std::process::Command::new("curl").args(["-o", CFG.input_file, CFG.input_url]).output();
     }
@@ -232,21 +251,21 @@ fn main() {
     let chars: Vec<char> = { let mut c: Vec<_> = raw.chars().collect::<HashSet<_>>().into_iter().filter(|c| !c.is_whitespace()).collect(); c.sort(); c };
     let vocab = chars.len() + 1;
     
-    let model = GPT::new(vocab, CFG.n_ctx, CFG.n_emb, CFG.n_layer);
+    let model = GPT::new(vocab, n_ctx, n_emb, n_layer, n_head, n_ff);
     let params = model.params();
-    println!("MicroGPT: {} params", params.len());
+    println!("MicroGPT: {} params, training for {} steps (lr={}, emb={}, head={}, layer={}, ctx={}, ff={})", params.len(), steps, lr, n_emb, n_head, n_layer, n_ctx, n_ff);
     
     let (mut m, mut v) = (vec![0.; params.len()], vec![0.; params.len()]);
     let docs: Vec<&str> = raw.lines().collect();
     
-    for step in 0..CFG.steps {
+    for step in 0..steps {
         let doc = docs[step % docs.len()];
         let tokens: Vec<usize> = std::iter::once(vocab-1)
             .chain(doc.chars().map(|c| chars.iter().position(|&x| x == c).unwrap()))
             .chain(std::iter::once(vocab-1)).collect();
 
         let mut loss = Val::new(0.);
-        let (mut kc, mut vc) = (vec![vec![]; CFG.n_layer], vec![vec![]; CFG.n_layer]);
+        let (mut kc, mut vc) = (vec![vec![]; n_layer], vec![vec![]; n_layer]);
         
         for p in 0..tokens.len()-1 {
             let logits = model.forward(tokens[p], p, &mut kc, &mut vc);
@@ -259,7 +278,7 @@ fn main() {
         for p in &params { p.zero(); }
         loss.backward();
 
-        let lr_t = CFG.lr * (1. - step as f64 / CFG.steps as f64);
+        let lr_t = lr * (1. - step as f64 / steps as f64);
         for (i, p) in params.iter().enumerate() {
             let g = p.grad();
             m[i] = CFG.adam_beta1 * m[i] + (1. - CFG.adam_beta1) * g;
@@ -273,10 +292,10 @@ fn main() {
     
     println!("\n--- Generation ---");
     for _ in 0..CFG.gen_samples {
-        let (mut kc, mut vc) = (vec![vec![]; CFG.n_layer], vec![vec![]; CFG.n_layer]);
+        let (mut kc, mut vc) = (vec![vec![]; n_layer], vec![vec![]; n_layer]);
         let mut tok = vocab - 1;
         print!("> ");
-        for p in 0..CFG.n_ctx {
+        for p in 0..n_ctx {
             let logits = model.forward(tok, p, &mut kc, &mut vc);
             let probs = softmax(&logits);
             let mut c = 0.;

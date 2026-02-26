@@ -1,0 +1,8 @@
+MicroGPT: 4192 params, training for 1000 steps
+step    0 | loss 3.7566step   20 | loss 3.0627step   40 | loss 2.6061step   60 | loss 2.6079step   80 | loss 2.5135step  100 | loss 3.1594step  120 | loss 2.7515step  140 | loss 2.6865step  160 | loss 2.1354step  180 | loss 2.4273step  200 | loss 3.1078step  220 | loss 1.9308step  240 | loss 2.9547step  260 | loss 2.5716step  280 | loss 2.6879step  300 | loss 1.4742step  320 | loss 1.6744step  340 | loss 2.2381step  360 | loss 2.6645step  380 | loss 1.9932step  400 | loss 2.4829step  420 | loss 2.1257step  440 | loss 2.3580step  460 | loss 2.0189step  480 | loss 2.6483step  500 | loss 1.7514step  520 | loss 2.4222step  540 | loss 1.8384step  560 | loss 1.7953step  580 | loss 1.7214step  600 | loss 2.4072step  620 | loss 3.4755step  640 | loss 2.6599step  660 | loss 3.0225step  680 | loss 1.4106step  700 | loss 1.6254step  720 | loss 1.7167step  740 | loss 1.5898step  760 | loss 2.5341step  780 | loss 1.7978step  800 | loss 2.0439step  820 | loss 2.0251step  840 | loss 1.8517step  860 | loss 1.9192step  880 | loss 2.4852step  900 | loss 2.8819step  920 | loss 2.0165step  940 | loss 1.8520step  960 | loss 1.9214step  980 | loss 2.4123
+--- Generation ---
+> wenaneda
+> rovi
+> jaeos
+> shdee
+> bairocy

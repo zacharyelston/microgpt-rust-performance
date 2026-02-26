@@ -1,0 +1,8 @@
+MicroGPT: 4192 params, training for 1000 steps (lr=0.005, emb=16, head=4, layer=1)
+step    0 | loss 3.2406step   20 | loss 2.9370step   40 | loss 2.4798step   60 | loss 2.4369step   80 | loss 2.6309step  100 | loss 2.8919step  120 | loss 2.6999step  140 | loss 2.5369step  160 | loss 2.1906step  180 | loss 2.1294step  200 | loss 2.9799step  220 | loss 2.0102step  240 | loss 2.9672step  260 | loss 2.3402step  280 | loss 2.8769step  300 | loss 1.5801step  320 | loss 1.7720step  340 | loss 2.2596step  360 | loss 2.7546step  380 | loss 1.9472step  400 | loss 2.3726step  420 | loss 1.8467step  440 | loss 2.3793step  460 | loss 2.1824step  480 | loss 2.6109step  500 | loss 1.8316step  520 | loss 2.3350step  540 | loss 1.8479step  560 | loss 1.8461step  580 | loss 1.7301step  600 | loss 2.4967step  620 | loss 3.1966step  640 | loss 2.3800step  660 | loss 3.1819step  680 | loss 1.4003step  700 | loss 1.5873step  720 | loss 1.6958step  740 | loss 1.6156step  760 | loss 2.4426step  780 | loss 1.9287step  800 | loss 2.0655step  820 | loss 1.8474step  840 | loss 2.0832step  860 | loss 1.8719step  880 | loss 2.7081step  900 | loss 3.0174step  920 | loss 1.9852step  940 | loss 1.8315step  960 | loss 2.1495step  980 | loss 2.6183
+--- Generation ---
+> ailia
+> lopa
+> velbanahf
+> raxoray
+> aerllir
