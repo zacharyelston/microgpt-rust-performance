@@ -2,11 +2,11 @@
   "n_emb": 16,
   "n_ctx": 16,
   "n_layer": 1,
-  "n_head": 4,
-  "n_ff_exp": 3,
+  "n_head": 2,
+  "n_ff_exp": 2,
   "steps": 500,
-  "lr": 0.009272448726759901,
-  "loss": 1.490908349213163,
-  "generation": 8,
+  "lr": 0.025281642837906352,
+  "loss": 1.446008678479632,
+  "generation": 9,
   "evolved": true
 }
