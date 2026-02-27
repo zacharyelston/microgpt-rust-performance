@@ -2,3 +2,4 @@
 output_*.txt
 __pycache__/
 *.pyc
+logs/

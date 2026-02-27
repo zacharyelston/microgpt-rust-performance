@@ -4,7 +4,7 @@
 */
 
 use rand::Rng;
-use std::{cell::RefCell, collections::HashSet, ops::{Add, Mul, Neg, Sub}, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, ops::{Add, Mul, Neg, Sub}, rc::Rc, fs::OpenOptions, io::Write};
 
 // --- I. The Atom: Value & Autograd ---
 
@@ -203,6 +203,7 @@ pub struct TrainingConfig {
     pub rms_eps: f64,
     pub init_scale: f64,
     pub input_file: String,
+    pub log_file: Option<String>,
 }
 
 impl Default for TrainingConfig {
@@ -213,11 +214,12 @@ impl Default for TrainingConfig {
             adam_beta1: 0.85, adam_beta2: 0.99, adam_eps: 1e-8,
             gen_samples: 5, rms_eps: 1e-5, init_scale: 0.1,
             input_file: "input.txt".to_string(),
+            log_file: None,
         }
     }
 }
 
-pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> Vec<String> {
+pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> (Vec<String>, f64) {
     // 1. Load Data
     let raw = std::fs::read_to_string(&cfg.input_file).unwrap_or_else(|_| "emma\nolivia\nava\n".to_string());
     let chars: Vec<char> = { 
@@ -234,7 +236,15 @@ pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> Vec<String> {
     // 3. Train
     let (mut m, mut v) = (vec![0.; params.len()], vec![0.; params.len()]);
     let docs: Vec<&str> = raw.lines().collect();
+    let mut final_loss = 0.0;
     
+    // Create/Truncate log file if specified
+    if let Some(path) = &cfg.log_file {
+        if let Ok(mut file) = OpenOptions::new().write(true).create(true).truncate(true).open(path) {
+            writeln!(file, "step,loss").ok();
+        }
+    }
+
     for step in 0..cfg.steps {
         let doc = docs[step % docs.len()];
         let tokens: Vec<usize> = std::iter::once(vocab-1)
@@ -250,7 +260,17 @@ pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> Vec<String> {
             loss = &loss - &probs[tokens[p+1]].log();
         }
         loss = &loss * &Val::new((tokens.len() as f64 - 1.).recip());
+        final_loss = loss.data();
         
+        // Log loss
+        if step % 10 == 0 {
+            if let Some(path) = &cfg.log_file {
+                if let Ok(mut file) = OpenOptions::new().write(true).append(true).open(path) {
+                    writeln!(file, "{},{:.6}", step, final_loss).ok();
+                }
+            }
+        }
+
         for p in &params { p.zero(); }
         loss.backward();
 
@@ -288,5 +308,5 @@ pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> Vec<String> {
         }
         results.push(name);
     }
-    results
+    (results, final_loss)
 }
