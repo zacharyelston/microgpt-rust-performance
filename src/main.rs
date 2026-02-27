@@ -1,9 +1,16 @@
 /*
-   MicroGPT: A Living Transformer
+    MicroGPT: A Living Transformer — Main Binary
 
-   A minimal GPT that evolves. When a genome.json exists (written by
-   the evolution engine), this program becomes the evolved creature.
-   Without it, it runs with default parameters — the primordial form.
+    This is the organism. When genome.json exists (written by the
+    evolution engine), it loads evolved hyperparameters and becomes
+    a different creature. Without it, it runs in primordial form
+    with hardcoded defaults.
+
+    The lifecycle:
+      1. Run evolve_loss to discover optimal DNA
+      2. Evolution writes genome.json
+      3. This binary reads it and becomes the evolved version
+      4. Delete genome.json to return to primordial state
 */
 
 use microgpt_rust::{train_and_generate, TrainingConfig};
@@ -13,6 +20,7 @@ const INPUT_URL: &str = "https://raw.githubusercontent.com/karpathy/makemore/mas
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
+    // Check for evolved genome — this is where self-modification happens
     let (mut cfg, origin) = match TrainingConfig::load_genome() {
         Some((genome, loss, gen)) => {
             println!("=== MicroGPT [Evolved] ===");
@@ -31,6 +39,7 @@ fn main() {
 
     cfg.gen_samples = 10;
 
+    // CLI overrides — these take precedence over both defaults and genome
     let mut silent = false;
     let mut i = 1;
     while i < args.len() {
@@ -48,6 +57,7 @@ fn main() {
         i += 1;
     }
 
+    // Ensure training data exists
     if std::fs::metadata(&cfg.input_file).is_err() {
         let _ = std::process::Command::new("curl").args(["-o", &cfg.input_file, INPUT_URL]).output();
     }

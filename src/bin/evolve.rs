@@ -1,11 +1,16 @@
 /*
-    MicroGPT Evolutionary Engine (Rust Edition)
-    
-    This binary implements the evolutionary algorithm directly in Rust,
-    utilizing Rayon for parallel processing of the population.
-    
-    It treats MicroGPT hyperparameters as a Genome and evolves them
-    to maximize aesthetic fitness of generated names.
+    MicroGPT Aesthetic Evolution Engine
+
+    A parallel evolutionary engine that optimizes for the *beauty*
+    of generated names rather than raw loss. Treats MicroGPT
+    hyperparameters as DNA and evolves them to maximize a fitness
+    function based on:
+
+      - Flow: pronounceability (vowel/consonant alternation)
+      - Symmetry: palindromes, repeating sub-patterns, pleasant endings
+      - Creativity: penalty for memorizing training data; reward novelty
+
+    Uses Rayon for parallel evaluation across all CPU cores.
 */
 
 use microgpt_rust::{load_training_data, train_and_generate, TrainingConfig};
@@ -19,6 +24,8 @@ const GENERATIONS: usize = 5;
 const ELITISM: usize = 2;
 const INPUT_FILE: &str = "input.txt";
 const TRAIN_STEPS: usize = 300;
+
+// --- Genome: hyperparameters as DNA ---
 
 #[derive(Clone, Debug)]
 struct Genome {
@@ -60,6 +67,7 @@ impl Genome {
         self.names.clear();
     }
 
+    // Ensure embedding dimension is divisible by number of heads
     fn enforce_constraints(&mut self) {
         if self.n_emb % self.n_head != 0 {
             self.n_head = 2;
@@ -70,6 +78,7 @@ impl Genome {
         }
     }
 
+    // Train a MicroGPT and evaluate the aesthetic quality of its output
     fn evaluate(&mut self, training_data: &HashSet<String>) {
         if self.fitness != 0.0 && !self.names.is_empty() {
             return;
@@ -87,17 +96,18 @@ impl Genome {
 
         let result = train_and_generate(&config, true);
         let score = calculate_fitness(&result.names, training_data);
-        
+
         self.names = result.names;
         self.fitness = score;
     }
 }
 
-// --- Judge Logic ---
+// --- Fitness: The Judge ---
+// Evaluates generated names on three aesthetic dimensions.
 
 fn calculate_fitness(names: &[String], training_data: &HashSet<String>) -> f64 {
     if names.is_empty() { return -100.0; }
-    
+
     let mut total_score = 0.0;
     let mut valid_count = 0;
 
@@ -109,6 +119,7 @@ fn calculate_fitness(names: &[String], training_data: &HashSet<String>) -> f64 {
         let s_sym = score_symmetry(&name);
         let s_creat = score_creativity(&name, training_data);
 
+        // Creativity weighted 2x — novelty matters most
         total_score += s_flow * 1.0 + s_sym * 1.2 + s_creat * 2.0;
         valid_count += 1;
     }
@@ -117,6 +128,7 @@ fn calculate_fitness(names: &[String], training_data: &HashSet<String>) -> f64 {
     total_score / valid_count as f64
 }
 
+// Flow: penalize unpronounceable clusters (3+ consecutive vowels or consonants)
 fn score_flow(name: &str) -> f64 {
     let vowels: HashSet<char> = ['a', 'e', 'i', 'o', 'u', 'y'].iter().cloned().collect();
     let mut score = 0.0;
@@ -135,21 +147,25 @@ fn score_flow(name: &str) -> f64 {
             score -= 1.0;
         }
     }
-    
+
+    // Bonus for ideal name length (4-8 characters)
     if name.len() >= 4 && name.len() <= 8 {
         score += 0.5;
     }
     score
 }
 
+// Symmetry: reward palindromes, repeating halves, pleasant endings
 fn score_symmetry(name: &str) -> f64 {
     let mut score = 0.0;
     let chars: Vec<char> = name.chars().collect();
-    
+
+    // Perfect palindrome
     if name.len() > 3 && chars.iter().eq(chars.iter().rev()) {
         score += 2.0;
     }
 
+    // Repeating first half (e.g., "mama")
     if name.len() >= 4 {
         let mid = name.len() / 2;
         if name[..mid] == name[mid..mid*2] {
@@ -157,12 +173,14 @@ fn score_symmetry(name: &str) -> f64 {
         }
     }
 
+    // Pleasant ending sounds
     if name.ends_with('a') || name.ends_with('n') || name.ends_with('y') {
         score += 0.2;
     }
     score
 }
 
+// Creativity: heavy penalty for memorizing training data
 fn score_creativity(name: &str, training_data: &HashSet<String>) -> f64 {
     if training_data.contains(name) {
         -5.0
@@ -191,12 +209,13 @@ fn main() {
         let start_time = Instant::now();
         println!("\n=== Generation {}/{} ===", gen + 1, GENERATIONS);
 
+        // Evaluate all organisms in parallel
         population.par_iter_mut().enumerate().for_each(|(_i, genome)| {
              genome.evaluate(&training_data);
         });
 
         for (i, g) in population.iter().enumerate() {
-            println!("Org {}: [Emb:{} Head:{} Lay:{} LR:{:.5}] -> Score: {:.4}", 
+            println!("Org {}: [Emb:{} Head:{} Lay:{} LR:{:.5}] -> Score: {:.4}",
                 i+1, g.n_emb, g.n_head, g.n_layer, g.lr, g.fitness);
             if !g.names.is_empty() {
                 println!("    Sample: {}", g.names.iter().take(3).cloned().collect::<Vec<_>>().join(", "));
@@ -206,18 +225,20 @@ fn main() {
         let gen_time = start_time.elapsed();
         println!("--- Generation Time: {:.2?} ---", gen_time);
 
+        // Sort by fitness (higher = more beautiful)
         population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
-        
+
         let best = &population[0];
         println!("\n>> Gen {} Champion: [Emb:{} Head:{} Lay:{} LR:{:.5}]", gen+1, best.n_emb, best.n_head, best.n_layer, best.lr);
         println!(">> Score: {:.4}", best.fitness);
 
+        // Breed next generation: keep elites, mutate the rest
         if gen < GENERATIONS - 1 {
             let mut new_pop = Vec::with_capacity(POPULATION_SIZE);
             for i in 0..ELITISM {
                 new_pop.push(population[i].clone());
             }
-            
+
             let mut rng = rand::thread_rng();
             while new_pop.len() < POPULATION_SIZE {
                 let parent = &population[rng.gen_range(0..ELITISM)];

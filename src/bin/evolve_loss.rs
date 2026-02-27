@@ -1,14 +1,22 @@
 /*
     MicroGPT Loss Evolution Engine
-    
-    Evolves hyperparameters to minimize training loss.
-    Uses diversity-aware evolution to prevent premature convergence:
-    - Tournament selection instead of pure elitism
-    - Mandatory random immigrants each generation
-    - Multi-gene mutations with wider parameter ranges
-    - Diversity bonus in fitness to discourage clone populations
-    
-    Uses Rayon for parallel evaluation.
+
+    The engine of self-modification. Breeds populations of hyperparameter
+    configs, evaluates each by training a full MicroGPT instance, and
+    selects for lower loss across generations.
+
+    When evolution completes, the winning genome is written to genome.json,
+    transforming what the main binary becomes on its next run.
+
+    Evolutionary mechanics:
+    - Tournament selection (k=3): any organism can parent if it wins its bracket
+    - Random immigrants (2/gen): fresh DNA to prevent population collapse
+    - Multi-gene mutation (1-3 params per event): broad exploration
+    - Panic recovery: crashed configs get MAX loss, don't kill the run
+    - Diversity tracking: reports unique architectures per generation
+
+    All results are logged to both stdout and a timestamped experiment file
+    in the experiments/ directory.
 */
 
 use microgpt_rust::{load_training_data, train_and_generate, TrainingConfig};
@@ -19,27 +27,34 @@ use std::io::Write;
 use std::sync::Mutex;
 use std::time::Instant;
 
+// --- Evolution Parameters ---
 const POPULATION_SIZE: usize = 8;
 const NUM_GENERATIONS: usize = 10;
-const TOURNAMENT_SIZE: usize = 3;
-const NUM_IMMIGRANTS: usize = 2;
+const TOURNAMENT_SIZE: usize = 3;  // How many compete for each parent slot
+const NUM_IMMIGRANTS: usize = 2;   // Fresh random organisms injected per generation
 const TARGET_LOSS: f64 = 1.2;
 const INPUT_FILE: &str = "input.txt";
 
+// --- Genome: The DNA of an organism ---
+// Each genome encodes the full hyperparameter set needed to build
+// and train a MicroGPT instance. The evolution engine treats these
+// as mutable traits subject to selection pressure.
+
 #[derive(Clone, Debug)]
 struct Genome {
-    n_emb: usize,
-    n_head: usize,
-    n_layer: usize,
-    n_ctx: usize,
-    n_ff_exp: usize,
-    lr: f64,
-    steps: usize,
-    loss: f64,
-    evaluated: bool,
+    n_emb: usize,    // Embedding dimension
+    n_head: usize,   // Attention heads
+    n_layer: usize,  // Transformer layers
+    n_ctx: usize,    // Context window length
+    n_ff_exp: usize, // Feed-forward expansion multiplier
+    lr: f64,         // Learning rate
+    steps: usize,    // Training steps
+    loss: f64,       // Fitness (lower is better)
+    evaluated: bool, // Whether this organism has been trained
 }
 
 impl Genome {
+    // Create a random organism from the full search space
     fn new_random() -> Self {
         let mut rng = rand::thread_rng();
         let n_emb = *[8, 12, 16, 20, 24, 32].choose(&mut rng).unwrap();
@@ -50,7 +65,7 @@ impl Genome {
             n_layer: rng.gen_range(1..=3),
             n_ctx: *[8, 12, 16, 24].choose(&mut rng).unwrap(),
             n_ff_exp: rng.gen_range(1..=4),
-            lr: 10f64.powf(rng.gen_range(-3.0..-1.3)),
+            lr: 10f64.powf(rng.gen_range(-3.0..-1.3)),  // Log-uniform: 0.001 to 0.05
             steps: *[200, 300, 500, 750, 1000, 1500].choose(&mut rng).unwrap(),
             loss: f64::MAX,
             evaluated: false,
@@ -59,6 +74,8 @@ impl Genome {
         g
     }
 
+    // Mutate 1-3 genes at random. This is deliberately aggressive —
+    // single-gene mutations led to premature convergence in earlier versions.
     fn mutate(&mut self) {
         let mut rng = rand::thread_rng();
         let num_mutations = rng.gen_range(1..=3);
@@ -82,6 +99,7 @@ impl Genome {
         self.evaluated = false;
     }
 
+    // Ensure n_emb is divisible by n_head (required for multi-head attention)
     fn enforce_constraints(&mut self) {
         if self.n_emb % self.n_head != 0 {
             let valid: Vec<usize> = [1, 2, 4].iter().copied()
@@ -91,6 +109,8 @@ impl Genome {
         }
     }
 
+    // Train a MicroGPT with this genome's hyperparameters and record the loss.
+    // Wrapped in catch_unwind so a panicking config doesn't kill the whole run.
     fn evaluate(&mut self, id: usize) {
         if self.evaluated {
             eprintln!("[eval] organism {} already evaluated (loss={:.4})", id, self.loss);
@@ -132,6 +152,7 @@ impl Genome {
             self.n_emb, self.n_head, self.n_layer, self.n_ctx, self.n_ff_exp, self.lr, self.steps)
     }
 
+    // Architecture signature for diversity tracking (ignores LR and steps)
     fn signature(&self) -> String {
         format!("{}-{}-{}-{}-{}", self.n_emb, self.n_head, self.n_layer, self.n_ctx, self.n_ff_exp)
     }
@@ -152,6 +173,9 @@ impl Genome {
     }
 }
 
+// --- Genetic Operators ---
+
+// Uniform crossover: each gene independently drawn from either parent
 fn crossover(a: &Genome, b: &Genome) -> Genome {
     let mut rng = rand::thread_rng();
     let mut child = Genome {
@@ -169,6 +193,9 @@ fn crossover(a: &Genome, b: &Genome) -> Genome {
     child
 }
 
+// Tournament selection: pick k random organisms, return the best.
+// This provides selection pressure without the harsh winner-take-all
+// of pure elitism — weaker organisms still have a chance.
 fn tournament_select<'a>(pop: &'a [Genome], rng: &mut ThreadRng) -> &'a Genome {
     let mut best: Option<&Genome> = None;
     for _ in 0..TOURNAMENT_SIZE {
@@ -180,6 +207,7 @@ fn tournament_select<'a>(pop: &'a [Genome], rng: &mut ThreadRng) -> &'a Genome {
     best.unwrap()
 }
 
+// Count unique architectures in the population
 fn population_diversity(pop: &[Genome]) -> (usize, f64) {
     let sigs: HashSet<String> = pop.iter().map(|g| g.signature()).collect();
     let unique = sigs.len();
@@ -187,12 +215,15 @@ fn population_diversity(pop: &[Genome]) -> (usize, f64) {
     (unique, diversity)
 }
 
+// --- Experiment Logging ---
+
 #[derive(Clone, Debug)]
 struct HistoryEntry {
     gen: usize,
     genome: Genome,
 }
 
+// Dual-output macro: prints to stdout AND writes to experiment log file
 macro_rules! log {
     ($log:expr, $($arg:tt)*) => {{
         let msg = format!($($arg)*);
@@ -207,6 +238,8 @@ fn experiment_filename() -> String {
     let now = chrono::Local::now();
     format!("experiments/evolve_{}.log", now.format("%Y%m%d_%H%M%S"))
 }
+
+// --- Main Evolution Loop ---
 
 fn main() {
     std::fs::create_dir_all("experiments").ok();
@@ -233,7 +266,7 @@ fn main() {
     let mut best_ever = Genome::new_random();
     best_ever.loss = f64::MAX;
     let mut history: Vec<HistoryEntry> = Vec::new();
-    let mut gen_bests: Vec<(usize, f64, f64)> = Vec::new();
+    let mut gen_bests: Vec<(usize, f64, f64)> = Vec::new();  // (gen, loss, diversity)
     let total_start = Instant::now();
     let mut target_gen: Option<usize> = None;
 
@@ -241,11 +274,13 @@ fn main() {
         let gen_start = Instant::now();
         log!(log_file, "--- Generation {}/{} ---", gen + 1, NUM_GENERATIONS);
 
+        // Evaluate all organisms in parallel using rayon
         eprintln!("[gen {}] evaluating {} organisms...", gen + 1, population.len());
         population.par_iter_mut().enumerate().for_each(|(i, genome)| {
             genome.evaluate(i + 1);
         });
 
+        // Rank by fitness (lower loss = better)
         population.sort_by(|a, b| a.loss.partial_cmp(&b.loss).unwrap());
 
         let (unique, diversity) = population_diversity(&population);
@@ -273,15 +308,18 @@ fn main() {
         log!(log_file, "  Best: {:.4} | Worst: {:.4} | Spread: {:.4} | Diversity: {}/{} ({:.0}%) | {:.0}s\n",
             gen_best.loss, gen_worst.loss, spread, unique, POPULATION_SIZE, diversity * 100.0, elapsed);
 
+        // --- Breed the next generation ---
         if gen < NUM_GENERATIONS - 1 {
             eprintln!("[gen {}] breeding next generation...", gen + 1);
             let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
 
+            // Keep the single best organism unchanged (elitism = 1)
             new_pop.push(population[0].clone());
             eprintln!("[breed] kept elite: {}", population[0].desc());
 
             let mut rng = rand::thread_rng();
 
+            // Inject random immigrants for diversity
             for i in 0..NUM_IMMIGRANTS {
                 if new_pop.len() < POPULATION_SIZE {
                     let immigrant = Genome::new_random();
@@ -290,6 +328,7 @@ fn main() {
                 }
             }
 
+            // Fill remaining slots with offspring
             let mut crossover_count = 0;
             let mut mutant_count = 0;
             let mut hypermutant_count = 0;
@@ -297,6 +336,7 @@ fn main() {
             while new_pop.len() < POPULATION_SIZE {
                 let strategy: f64 = rng.gen();
                 if strategy < 0.4 {
+                    // Crossover + mutation: combine two tournament winners
                     let p1 = tournament_select(&population, &mut rng);
                     let p2 = tournament_select(&population, &mut rng);
                     let mut child = crossover(p1, p2);
@@ -304,12 +344,14 @@ fn main() {
                     new_pop.push(child);
                     crossover_count += 1;
                 } else if strategy < 0.8 {
+                    // Single mutation: clone a tournament winner and mutate
                     let parent = tournament_select(&population, &mut rng);
                     let mut child = parent.clone();
                     child.mutate();
                     new_pop.push(child);
                     mutant_count += 1;
                 } else {
+                    // Hypermutation: double mutation for extra exploration
                     let parent = tournament_select(&population, &mut rng);
                     let mut child = parent.clone();
                     child.mutate();
@@ -323,6 +365,10 @@ fn main() {
             population = new_pop;
         }
     }
+
+    // ========================================
+    // Post-evolution analysis and reporting
+    // ========================================
 
     let total_time = total_start.elapsed().as_secs_f64();
     let total_evals = history.len();
@@ -341,6 +387,7 @@ fn main() {
         log!(log_file, "  Target {:.1} NOT reached", TARGET_LOSS);
     }
 
+    // Loss trajectory across generations
     log!(log_file, "\n--- Evolution Trajectory ---");
     log!(log_file, "  {:>4}  {:>8}  {:>9}", "Gen", "Best", "Diversity");
     for (gen, loss, div) in &gen_bests {
@@ -349,6 +396,7 @@ fn main() {
         log!(log_file, "  {:>4}  {:>8.4}  {:>8.0}%  {}", gen, loss, div * 100.0, bar);
     }
 
+    // Top unique architectures (deduplicated by structural signature)
     log!(log_file, "\n--- Top Configs Across All Generations ---");
     let mut sorted_history = history.clone();
     sorted_history.sort_by(|a, b| a.genome.loss.partial_cmp(&b.genome.loss).unwrap());
@@ -366,6 +414,7 @@ fn main() {
         log!(log_file, "  {:2}. Gen {} | Loss {:.4} | {}", i + 1, entry.gen, entry.genome.loss, entry.genome.desc());
     }
 
+    // Compare top 10 vs bottom 10 to find what matters
     log!(log_file, "\n--- Hyperparameter Analysis ---");
 
     let top_n = std::cmp::min(10, sorted_history.len());
@@ -402,6 +451,7 @@ fn main() {
         }
     }
 
+    // Derive actionable insights from the data
     log!(log_file, "\n--- Insights ---");
     let mut insights = Vec::new();
 
@@ -447,6 +497,7 @@ fn main() {
         }
     }
 
+    // --- Self-modification: write the winning genome ---
     let best_config = best_ever.to_config(10);
     let best_gen = sorted_history.iter()
         .find(|e| e.genome.loss == best_ever.loss)
@@ -465,6 +516,7 @@ fn main() {
         }
     }
 
+    // Demo the best organism
     log!(log_file, "\n--- Final Demo with Best Config ---");
     let result = train_and_generate(&best_config, false);
     log!(log_file, "Final loss: {:.4}", result.final_loss);

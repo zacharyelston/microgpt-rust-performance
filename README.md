@@ -1,90 +1,98 @@
-# MicroGPT: The Art of Symmetry
+# MicroGPT: A Living Transformer
 
-> "Truth is the intersection of beauty and functionality."
+> A minimal GPT that evolves itself.
 
-A minimalist, aesthetic implementation of a Transformer in Rust. This project is an exploration of **symmetry in systems**, porting [Andrej Karpathy's microGPT](https://karpathy.github.io/2026/02/12/microgpt/) to Rust. By reducing the GPT architecture to its atomic components and defining their interactions through fundamental operators, we reveal the elegant mathematical structure underlying modern AI.
+A self-modifying Transformer implementation in Rust with zero ML dependencies. Starting from [Andrej Karpathy's microGPT](https://karpathy.github.io/2026/02/12/microgpt/), the project adds a spark of life: an evolutionary engine that discovers optimal hyperparameters and writes them back into the organism, transforming what the program becomes.
 
-## The Philosophy
+## The Lifecycle
+
+```
+            ┌─────────────┐
+            │  Primordial  │  cargo run --release
+            │  (defaults)  │  "I am unformed"
+            └──────┬───────┘
+                   │
+            ┌──────▼───────┐
+            │   Evolution   │  cargo run --release --bin evolve_loss
+            │  10 gens × 8  │  "I am searching"
+            └──────┬───────┘
+                   │ writes genome.json
+            ┌──────▼───────┐
+            │   Evolved     │  cargo run --release
+            │  (from DNA)   │  "I have become"
+            └───────────────┘
+```
+
+1. **Primordial**: Run `cargo run --release` — the creature runs with hardcoded defaults. It works, but it hasn't found itself yet.
+2. **Evolution**: Run `cargo run --release --bin evolve_loss` — populations of 8 organisms compete across 10 generations. Tournament selection, crossover, mutation, random immigrants. The fittest survive.
+3. **Self-modification**: The winner's DNA is written to `genome.json`. The program has rewritten itself.
+4. **Evolved**: Now `cargo run --release` reads the genome and runs as the evolved creature — different architecture, different learning rate, different capacity. A new thing.
+
+## What's Inside
 
 ### I. The Atom: `Val`
-At the heart of the system lies the **Value** (`Val`). It is the indivisible atom of our universe.
-- It holds **Data** (the reality).
-- It holds **Gradient** (the potential for change).
-- It remembers its **History** (the provenance of its existence).
+Every number in the system is a `Val` — it holds data, remembers its gradient, and knows its computational history. Backpropagation happens automatically through the graph. This is the entire autograd engine, built from scratch.
 
 ```rust
 struct Val(Rc<RefCell<Node>>);
 struct Node { data: f64, grad: f64, prev: Vec<(Val, f64)> }
 ```
 
-### II. The Algebra: Operations
-We define interactions not as distinct functions, but as fundamental operators. The symmetry here is in the **Operator Overloading**:
+### II. The Algebra: Operators
+Arithmetic is defined once through a macro. Add, subtract, multiply — each operation records the local gradient for the chain rule. Whether you write `a + b`, `&a + b`, or `a + &b`, the behavior is identical.
 
 ```rust
-op!(Add, add, +);
-op!(Mul, mul, *);
+op!(Add, add, +, |_,_| 1., |_,_| 1.);
+op!(Mul, mul, *, |_,o| o.data(), |s,_| s.data());
 ```
 
-Whether adding two `Val`s, a `Val` and a reference, or a reference and a `Val`, the interaction is identical. The chain rule of calculus (`backward`) is inherent in every interaction, automatically weaving the graph of computation.
+### III. The Architecture: GPT
+Token embeddings, positional embeddings, multi-head attention with KV caching, RMSNorm, and feed-forward layers — the full transformer stack, compact and readable.
 
-### III. The Architecture
-The GPT model itself is a study in fractal symmetry:
-- **Linear Layer**: A transformation of space.
-- **Attention**: The mechanism of relating different points in time.
-- **MLP**: The mechanism of processing information at a single point in time.
+### IV. The Evolution Engine
+The `evolve_loss` binary treats hyperparameters as DNA:
+- **Tournament selection** (k=3) — any organism can become a parent by winning its bracket
+- **Random immigrants** (2/gen) — fresh DNA injected to prevent stagnation
+- **Multi-gene mutation** — 1–3 parameters change per mutation event
+- **Panic recovery** — crashed configs get MAX loss instead of killing the run
+- **Diversity tracking** — each generation reports unique architecture count
+
+The search space covers embedding size (8–32), heads (1–4), layers (1–4), context window (8–24), FF multiplier (1–4), learning rate (log-uniform 0.001–0.05), and training steps (100–2000).
 
 ## Quick Start
 
-The entire core implementation is ~240 lines of code in `src/lib.rs` and `src/main.rs` with zero ML dependencies.
-
 ```bash
-# Build and run the standard training loop
+# Run the creature (primordial or evolved)
 cargo run --release
-```
 
-## Evolutionary Engine
+# Evolve — searches for optimal DNA, writes genome.json
+cargo run --release --bin evolve_loss
 
-This repository includes a parallel evolutionary engine that treats the MicroGPT configuration as "DNA". It evolves hyperparameters (embedding size, layers, heads, learning rate) to maximize the **aesthetic quality** of generated names (Flow, Symmetry, Creativity).
-
-The engine is written in pure Rust and uses `rayon` for parallel processing across all CPU cores.
-
-```bash
-# Run the evolutionary search
+# Run the aesthetic evolution engine (fitness = name beauty)
 cargo run --release --bin evolve
 ```
 
-### Fitness Function
-The "Judge" evaluates generated names based on:
-1.  **Flow**: Pronounceability (alternating vowel/consonant patterns).
-2.  **Symmetry**: Palindromes and repeating sub-patterns.
-3.  **Creativity**: Penalty for memorizing training data; reward for novelty.
+## Project Structure
 
-## Scaling & Parameter Sweeps
-
-This repository includes tools to analyze how MicroGPT scales with **training steps** and **model size**.
-
-### 1. Running Tests
-```bash
-# Step Scaling (Time): Train models for 1k, 3k, ... 21k steps
-./run_scaling_tests.sh
-
-# Parameter Scaling (Size): Train Small, Medium, and Large models
-./run_param_scaling.sh
+```
+src/lib.rs              Autograd engine, GPT model, training loop, genome I/O
+src/main.rs             The living creature — reads genome.json if it exists
+src/bin/evolve_loss.rs  Loss evolution engine with diversity-aware selection
+src/bin/evolve.rs       Aesthetic evolution engine (flow, symmetry, creativity)
+genome.json             The organism's evolved DNA (written by evolution)
+experiments/            Timestamped experiment logs
+input.txt               Training data (names from Karpathy's makemore)
 ```
 
-### 2. Analyzing Results
-We provide Python scripts to analyze the output logs:
+## Dependencies
 
-```bash
-# View basic tables of Loss vs Steps/Params
-python3 analyze_scaling.py
-python3 analyze_param_scaling.py
+- `rand` — random number generation
+- `rayon` — parallel evaluation of organism populations
+- `chrono` — timestamped experiment filenames
 
-# Calculate "Return on Investment" (Loss drop per 1,000 units)
-python3 analyze_efficiency.py
-```
+No ML frameworks. No BLAS. No GPU. Just math.
 
 ## Acknowledgments
 
-- **Andrej Karpathy** for the original [microGPT](https://github.com/karpathy/microGPT) and his [blog post](https://karpathy.github.io/2026/02/12/microgpt/).
-- **The Rust Language** for allowing high-level abstractions with low-level control.
+- [Andrej Karpathy](https://karpathy.github.io/2026/02/12/microgpt/) for the original microGPT
+- The Rust language for making this kind of thing possible in ~500 lines
