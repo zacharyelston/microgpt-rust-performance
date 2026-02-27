@@ -58,9 +58,13 @@ impl Genome {
         match choice {
             0 => self.n_emb = *[16, 24, 32, 40].choose(&mut rng).unwrap(),
             1 => self.n_head = *[2, 4].choose(&mut rng).unwrap(),
-            2 => self.n_layer = (self.n_layer as i32 + *[-1, 1].choose(&mut rng).unwrap()).max(1).min(4) as usize,
+            2 => {
+                self.n_layer = (self.n_layer as i32 + *[-1, 1].choose(&mut rng).unwrap())
+                    .max(1)
+                    .min(4) as usize
+            }
             3 => self.lr = (self.lr * rng.gen_range(0.7..1.3)).max(0.0001).min(0.1),
-            _ => {},
+            _ => {}
         }
         self.enforce_constraints();
         self.fitness = 0.0;
@@ -73,17 +77,20 @@ impl Genome {
             self.n_head = 2;
         }
         if self.n_emb % self.n_head != 0 {
-             self.n_emb = (self.n_emb / self.n_head) * self.n_head;
-             if self.n_emb == 0 { self.n_emb = self.n_head; }
+            self.n_emb = (self.n_emb / self.n_head) * self.n_head;
+            if self.n_emb == 0 {
+                self.n_emb = self.n_head;
+            }
         }
     }
 
     // Train a MicroGPT and evaluate the aesthetic quality of its output
-    fn evaluate(&mut self, training_data: &HashSet<String>) {
+    fn evaluate(&mut self, training_data: &HashSet<String>, seed: Option<u64>, id: usize) {
         if self.fitness != 0.0 && !self.names.is_empty() {
             return;
         }
 
+        let eval_seed = seed.map(|base| base ^ (id as u64).wrapping_mul(0x9E3779B97F4A7C15));
         let config = TrainingConfig {
             n_emb: self.n_emb,
             n_head: self.n_head,
@@ -91,6 +98,7 @@ impl Genome {
             lr: self.lr,
             steps: TRAIN_STEPS,
             input_file: INPUT_FILE.to_string(),
+            seed: eval_seed,
             ..Default::default()
         };
 
@@ -106,14 +114,18 @@ impl Genome {
 // Evaluates generated names on three aesthetic dimensions.
 
 fn calculate_fitness(names: &[String], training_data: &HashSet<String>) -> f64 {
-    if names.is_empty() { return -100.0; }
+    if names.is_empty() {
+        return -100.0;
+    }
 
     let mut total_score = 0.0;
     let mut valid_count = 0;
 
     for name in names {
         let name = name.trim().to_lowercase();
-        if name.len() < 3 || !name.chars().all(|c| c.is_alphabetic()) { continue; }
+        if name.len() < 3 || !name.chars().all(|c| c.is_alphabetic()) {
+            continue;
+        }
 
         let s_flow = score_flow(&name);
         let s_sym = score_symmetry(&name);
@@ -124,7 +136,9 @@ fn calculate_fitness(names: &[String], training_data: &HashSet<String>) -> f64 {
         valid_count += 1;
     }
 
-    if valid_count == 0 { return -100.0; }
+    if valid_count == 0 {
+        return -100.0;
+    }
     total_score / valid_count as f64
 }
 
@@ -168,7 +182,7 @@ fn score_symmetry(name: &str) -> f64 {
     // Repeating first half (e.g., "mama")
     if name.len() >= 4 {
         let mid = name.len() / 2;
-        if name[..mid] == name[mid..mid*2] {
+        if name[..mid] == name[mid..mid * 2] {
             score += 1.5;
         }
     }
@@ -193,11 +207,34 @@ fn score_creativity(name: &str, training_data: &HashSet<String>) -> f64 {
 
 fn main() {
     println!("--- Starting Aesthetic Evolution (Rust Edition) ---");
-    println!("Pop: {}, Gens: {}, Threads: Parallel", POPULATION_SIZE, GENERATIONS);
+    println!(
+        "Pop: {}, Gens: {}, Threads: Parallel",
+        POPULATION_SIZE, GENERATIONS
+    );
+
+    let mut run_seed: Option<u64> = None;
+    let args: Vec<String> = std::env::args().collect();
+    let mut i = 1;
+    while i < args.len() {
+        if args[i] == "--seed" {
+            i += 1;
+            if i < args.len() {
+                run_seed = args[i].parse::<u64>().ok();
+            }
+        }
+        i += 1;
+    }
+    if let Some(seed) = run_seed {
+        println!("Seed: {}", seed);
+    }
 
     if std::fs::metadata(INPUT_FILE).is_err() {
         let _ = std::process::Command::new("curl")
-            .args(["-o", INPUT_FILE, "https://raw.githubusercontent.com/karpathy/makemore/master/names.txt"])
+            .args([
+                "-o",
+                INPUT_FILE,
+                "https://raw.githubusercontent.com/karpathy/makemore/master/names.txt",
+            ])
             .output();
     }
     let raw = load_training_data(INPUT_FILE);
@@ -210,15 +247,33 @@ fn main() {
         println!("\n=== Generation {}/{} ===", gen + 1, GENERATIONS);
 
         // Evaluate all organisms in parallel
-        population.par_iter_mut().enumerate().for_each(|(_i, genome)| {
-             genome.evaluate(&training_data);
-        });
+        population
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, genome)| {
+                genome.evaluate(&training_data, run_seed, i + gen * POPULATION_SIZE);
+            });
 
         for (i, g) in population.iter().enumerate() {
-            println!("Org {}: [Emb:{} Head:{} Lay:{} LR:{:.5}] -> Score: {:.4}",
-                i+1, g.n_emb, g.n_head, g.n_layer, g.lr, g.fitness);
+            println!(
+                "Org {}: [Emb:{} Head:{} Lay:{} LR:{:.5}] -> Score: {:.4}",
+                i + 1,
+                g.n_emb,
+                g.n_head,
+                g.n_layer,
+                g.lr,
+                g.fitness
+            );
             if !g.names.is_empty() {
-                println!("    Sample: {}", g.names.iter().take(3).cloned().collect::<Vec<_>>().join(", "));
+                println!(
+                    "    Sample: {}",
+                    g.names
+                        .iter()
+                        .take(3)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
             }
         }
 
@@ -229,7 +284,14 @@ fn main() {
         population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
 
         let best = &population[0];
-        println!("\n>> Gen {} Champion: [Emb:{} Head:{} Lay:{} LR:{:.5}]", gen+1, best.n_emb, best.n_head, best.n_layer, best.lr);
+        println!(
+            "\n>> Gen {} Champion: [Emb:{} Head:{} Lay:{} LR:{:.5}]",
+            gen + 1,
+            best.n_emb,
+            best.n_head,
+            best.n_layer,
+            best.lr
+        );
         println!(">> Score: {:.4}", best.fitness);
 
         // Breed next generation: keep elites, mutate the rest
