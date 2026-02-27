@@ -49,15 +49,25 @@ op!(Mul, mul, *, |_,o| o.data(), |s,_| s.data());
 ### III. The Architecture: GPT
 Token embeddings, positional embeddings, multi-head attention with KV caching, RMSNorm, and feed-forward layers — the full transformer stack, compact and readable.
 
-### IV. The Evolution Engine
-The `evolve_loss` binary treats hyperparameters as DNA:
-- **Tournament selection** (k=3) — any organism can become a parent by winning its bracket
-- **Random immigrants** (2/gen) — fresh DNA injected to prevent stagnation
-- **Multi-gene mutation** — 1–3 parameters change per mutation event
-- **Panic recovery** — crashed configs get MAX loss instead of killing the run
-- **Diversity tracking** — each generation reports unique architecture count
+### IV. The Evolution Engine (v2)
 
-The search space covers embedding size (8–32), heads (1–4), layers (1–4), context window (8–24), FF multiplier (1–4), learning rate (log-uniform 0.001–0.05), and training steps (100–2000).
+The engine thinks in **species**, not just individuals. Organisms are grouped by architecture family, and the population is managed to maintain diversity while converging on winners.
+
+**Normal Breeding** (stagnation 0-1):
+- Elite carried forward, 2 random immigrants, crossover + mutation offspring
+
+**Championship Breeding** (stagnation 2-3):
+- Top 3 winners mated together with fine-tuning (small LR/steps tweaks)
+- **Growth mutation**: the proven winner earns a structural upgrade — an extra layer, doubled heads, expanded context, or wider feed-forward. The polydactyl cat effect: success breeds complexity.
+- Elite is force re-evaluated (no frozen loss advantage)
+
+**Cataclysm** (stagnation 4+):
+- Population nuked, rebuilt from expanded search space
+- Avoids blacklisted species (architectures that failed repeatedly)
+
+**Loser Blacklist**: Architectures producing loss > 2.3 across 2+ evaluations are remembered and avoided. The engine learns from failure.
+
+**Origin Tags**: Every organism is tagged with how it was born: `[random]`, `[elite]`, `[mutant]`, `[cross]`, `[hyper]`, `[immigrant]`, `[re-eval]`, `[cataclysm]`, `[grown]`, `[champion]`, `[tuned]`
 
 ## Quick Start
 
@@ -77,7 +87,7 @@ cargo run --release --bin evolve
 ```
 src/lib.rs              Autograd engine, GPT model, training loop, genome I/O
 src/main.rs             The living creature — reads genome.json if it exists
-src/bin/evolve_loss.rs  Loss evolution engine with diversity-aware selection
+src/bin/evolve_loss.rs  Loss evolution engine v2 (species-aware, championship, growth)
 src/bin/evolve.rs       Aesthetic evolution engine (flow, symmetry, creativity)
 genome.json             The organism's evolved DNA (written by evolution)
 experiments/            Timestamped experiment logs

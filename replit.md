@@ -19,16 +19,37 @@ A minimalist Rust implementation of a self-evolving Transformer (GPT), porting K
 │   ├── main.rs           # Main binary: runs as evolved or primordial creature
 │   └── bin/
 │       ├── evolve.rs     # Aesthetic evolution binary (parallel via rayon)
-│       └── evolve_loss.rs # Loss-targeting evolution engine (target < 1.2)
+│       └── evolve_loss.rs # Loss evolution engine v2 (species-aware)
 ├── genome.json            # The organism's evolved DNA (written by evolution)
 ├── experiments/           # Auto-generated experiment logs (timestamped)
 ├── Cargo.toml            # Rust dependencies (rand, rayon, chrono)
 ├── input.txt             # Training dataset (names from makemore)
-├── analyze_*.py          # Python analysis scripts for scaling experiments
-├── run_*.sh              # Shell scripts for parameter sweep experiments
 ├── README.md             # Project documentation
 └── COMPARISON.md         # Performance comparison notes
 ```
+
+## Evolution Engine v2 Mechanics
+
+The evolution engine now operates at the **species level**, not just individual organisms:
+
+- **Species tracking**: Organisms are grouped by architecture family (Emb-Head-Lay-Ctx-FF). Monoculture (one species dominating) is tracked and reported.
+- **Loser blacklist**: Architectures that fail consistently (loss > 2.3 across 2+ samples) are remembered and avoided when generating new organisms.
+- **Growth mutation (Fibonacci/polydactyl)**: Proven winners earn structural upgrades — an extra layer, doubled heads, expanded context, or wider FF. The organism literally grows.
+- **Championship breeding**: On mild stagnation (2 gens), the top 3 winners are mated together with fine-tuning mutations. Elite is force re-evaluated.
+- **Cataclysm**: On deep stagnation (4+ gens), the population is blown up and rebuilt from an expanded search space, avoiding blacklisted species.
+- **Fine-tuning**: Championship mode generates variants of the winner with small LR/steps tweaks instead of random mutations.
+
+### Stagnation Response Ladder
+
+| Stagnation | Response | Strategy |
+|-----------|----------|----------|
+| 0-1 | Normal breeding | Elite + immigrants + crossover/mutant/hyper |
+| 2-3 | Championship | Re-eval elite + growth mutation + mate top 3 + fine-tune |
+| 4+ | Cataclysm | Re-eval elite + wide random search (avoiding blacklist) |
+
+### Origin Tags
+
+Each organism's creation method is tracked: `[random]`, `[elite]`, `[mutant]`, `[cross]`, `[hyper]`, `[immigrant]`, `[re-eval]`, `[cataclysm]`, `[grown]`, `[champion]`, `[tuned]`
 
 ## Running
 
@@ -47,11 +68,6 @@ cargo run --release --bin evolve          # Aesthetic evolutionary search
 - `TrainingResult` struct returns names, final_loss, num_params
 - `train_and_generate()` shared function used by all binaries
 - `load_training_data()` and `build_vocab()` shared data loading
-- Aesthetic evolution: fitness scoring (flow, symmetry, creativity)
-- Loss evolution: tournament selection, diversity-aware, panic recovery
-  - Experiment results saved to `experiments/evolve_YYYYMMDD_HHMMSS.log`
-  - Debug logging via stderr for real-time organism evaluation tracking
-  - Writes `genome.json` on completion — the program becomes its best self
 
 ## Dependencies
 
