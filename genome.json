@@ -1,12 +1,12 @@
 {
-  "n_emb": 8,
-  "n_ctx": 5,
-  "n_layer": 5,
+  "n_emb": 5,
+  "n_ctx": 2,
+  "n_layer": 2,
   "n_head": 1,
-  "n_ff_exp": 7,
-  "steps": 1000,
-  "lr": 0.016985978505881027,
-  "loss": 1.5528331258224408,
-  "generation": 5,
+  "n_ff_exp": 2,
+  "steps": 200,
+  "lr": 0.048114749200395004,
+  "loss": 1.5081209359563335,
+  "generation": 58,
   "evolved": true
 }
