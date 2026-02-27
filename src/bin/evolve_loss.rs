@@ -33,6 +33,7 @@ const NUM_GENERATIONS: usize = 10;
 const TOURNAMENT_SIZE: usize = 3;  // How many compete for each parent slot
 const NUM_IMMIGRANTS: usize = 2;   // Fresh random organisms injected per generation
 const TARGET_LOSS: f64 = 1.2;
+const STAGNATION_THRESHOLD: usize = 3; // Trigger cataclysm after this many consecutive elite wins
 const INPUT_FILE: &str = "input.txt";
 
 // --- Genome: The DNA of an organism ---
@@ -71,6 +72,30 @@ impl Genome {
             loss: f64::MAX,
             evaluated: false,
             origin: "random".to_string(),
+        };
+        g.enforce_constraints();
+        g
+    }
+
+    // Create a random organism from an EXPANDED search space.
+    // Used during cataclysm events to explore regions the normal
+    // search space doesn't cover — bigger models, more training steps,
+    // different learning rate ranges.
+    fn new_random_wide() -> Self {
+        let mut rng = rand::thread_rng();
+        let n_emb = *[8, 16, 24, 32, 48, 64].choose(&mut rng).unwrap();
+        let n_head = *[1, 2, 4, 8].choose(&mut rng).unwrap();
+        let mut g = Genome {
+            n_emb,
+            n_head,
+            n_layer: rng.gen_range(1..=6),
+            n_ctx: *[8, 12, 16, 24, 32].choose(&mut rng).unwrap(),
+            n_ff_exp: rng.gen_range(1..=6),
+            lr: 10f64.powf(rng.gen_range(-4.0..-1.0)),  // Wider: 0.0001 to 0.1
+            steps: *[300, 500, 1000, 1500, 2000, 3000].choose(&mut rng).unwrap(),
+            loss: f64::MAX,
+            evaluated: false,
+            origin: "cataclysm".to_string(),
         };
         g.enforce_constraints();
         g
@@ -272,6 +297,8 @@ fn main() {
     let mut gen_bests: Vec<(usize, f64, f64)> = Vec::new();  // (gen, loss, diversity)
     let total_start = Instant::now();
     let mut target_gen: Option<usize> = None;
+    let mut stagnation_count: usize = 0;    // Consecutive gens where elite wins unchanged
+    let mut prev_best_loss: f64 = f64::MAX; // Track the previous gen's best loss
 
     for gen in 0..NUM_GENERATIONS {
         let gen_start = Instant::now();
@@ -301,6 +328,14 @@ fn main() {
         }
         gen_bests.push((gen + 1, gen_best.loss, diversity));
 
+        // Track stagnation: did the best loss improve this generation?
+        if (gen_best.loss - prev_best_loss).abs() < 1e-8 {
+            stagnation_count += 1;
+        } else {
+            stagnation_count = 0;
+        }
+        prev_best_loss = gen_best.loss;
+
         if target_gen.is_none() && best_ever.loss < TARGET_LOSS {
             target_gen = Some(gen + 1);
             log!(log_file, "  ** Target {:.1} reached! Continuing to evolve... **", TARGET_LOSS);
@@ -308,70 +343,100 @@ fn main() {
 
         let spread = gen_worst.loss - gen_best.loss;
         let elapsed = gen_start.elapsed().as_secs_f64();
-        log!(log_file, "  Best: {:.4} | Worst: {:.4} | Spread: {:.4} | Diversity: {}/{} ({:.0}%) | {:.0}s\n",
-            gen_best.loss, gen_worst.loss, spread, unique, POPULATION_SIZE, diversity * 100.0, elapsed);
+        log!(log_file, "  Best: {:.4} | Worst: {:.4} | Spread: {:.4} | Diversity: {}/{} ({:.0}%) | Stagnation: {} | {:.0}s\n",
+            gen_best.loss, gen_worst.loss, spread, unique, POPULATION_SIZE, diversity * 100.0, stagnation_count, elapsed);
 
         // --- Breed the next generation ---
         if gen < NUM_GENERATIONS - 1 {
-            eprintln!("[gen {}] breeding next generation...", gen + 1);
-            let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
+            let cataclysm = stagnation_count >= STAGNATION_THRESHOLD;
 
-            // Keep the single best organism unchanged (elitism = 1)
-            let mut elite = population[0].clone();
-            elite.origin = "elite".to_string();
-            new_pop.push(elite);
-            eprintln!("[breed] kept elite: {}", population[0].desc());
+            if cataclysm {
+                // CATACLYSM: Elite has won too many times in a row.
+                // Force re-evaluate it (remove frozen loss advantage) and
+                // flood the population with organisms from a wider search space.
+                log!(log_file, "  *** CATACLYSM: {} gens stagnant — expanding search space ***", stagnation_count);
+                eprintln!("[gen {}] CATACLYSM triggered after {} stagnant gens", gen + 1, stagnation_count);
 
-            let mut rng = rand::thread_rng();
+                let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
 
-            // Inject random immigrants for diversity
-            for i in 0..NUM_IMMIGRANTS {
-                if new_pop.len() < POPULATION_SIZE {
-                    let mut immigrant = Genome::new_random();
-                    immigrant.origin = "immigrant".to_string();
-                    eprintln!("[breed] immigrant {}: {}", i + 1, immigrant.desc());
-                    new_pop.push(immigrant);
+                // Keep the elite's CONFIG but force re-evaluation (no frozen loss)
+                let mut elite = population[0].clone();
+                elite.origin = "re-eval".to_string();
+                elite.evaluated = false;
+                elite.loss = f64::MAX;
+                new_pop.push(elite);
+                eprintln!("[breed] elite re-eval forced: {}", population[0].desc());
+
+                // Fill the rest with wide-range randoms to explore new territory
+                while new_pop.len() < POPULATION_SIZE {
+                    new_pop.push(Genome::new_random_wide());
                 }
-            }
+                eprintln!("[breed] cataclysm: 1 re-eval + {} wide randoms", POPULATION_SIZE - 1);
 
-            // Fill remaining slots with offspring
-            let mut crossover_count = 0;
-            let mut mutant_count = 0;
-            let mut hypermutant_count = 0;
+                stagnation_count = 0;
+                population = new_pop;
+            } else {
+                // Normal breeding
+                eprintln!("[gen {}] breeding next generation...", gen + 1);
+                let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
 
-            while new_pop.len() < POPULATION_SIZE {
-                let strategy: f64 = rng.gen();
-                if strategy < 0.4 {
-                    // Crossover + mutation: combine two tournament winners
-                    let p1 = tournament_select(&population, &mut rng);
-                    let p2 = tournament_select(&population, &mut rng);
-                    let mut child = crossover(p1, p2);
-                    child.mutate();
-                    child.origin = "cross".to_string();
-                    new_pop.push(child);
-                    crossover_count += 1;
-                } else if strategy < 0.8 {
-                    // Single mutation: clone a tournament winner and mutate
-                    let parent = tournament_select(&population, &mut rng);
-                    let mut child = parent.clone();
-                    child.mutate();
-                    child.origin = "mutant".to_string();
-                    new_pop.push(child);
-                    mutant_count += 1;
-                } else {
-                    // Hypermutation: double mutation for extra exploration
-                    let parent = tournament_select(&population, &mut rng);
-                    let mut child = parent.clone();
-                    child.mutate();
-                    child.mutate();
-                    child.origin = "hyper".to_string();
-                    new_pop.push(child);
-                    hypermutant_count += 1;
+                // Keep the single best organism unchanged (elitism = 1)
+                let mut elite = population[0].clone();
+                elite.origin = "elite".to_string();
+                new_pop.push(elite);
+                eprintln!("[breed] kept elite: {}", population[0].desc());
+
+                let mut rng = rand::thread_rng();
+
+                // Inject random immigrants for diversity
+                for i in 0..NUM_IMMIGRANTS {
+                    if new_pop.len() < POPULATION_SIZE {
+                        let mut immigrant = Genome::new_random();
+                        immigrant.origin = "immigrant".to_string();
+                        eprintln!("[breed] immigrant {}: {}", i + 1, immigrant.desc());
+                        new_pop.push(immigrant);
+                    }
                 }
+
+                // Fill remaining slots with offspring
+                let mut crossover_count = 0;
+                let mut mutant_count = 0;
+                let mut hypermutant_count = 0;
+
+                while new_pop.len() < POPULATION_SIZE {
+                    let strategy: f64 = rng.gen();
+                    if strategy < 0.4 {
+                        // Crossover + mutation: combine two tournament winners
+                        let p1 = tournament_select(&population, &mut rng);
+                        let p2 = tournament_select(&population, &mut rng);
+                        let mut child = crossover(p1, p2);
+                        child.mutate();
+                        child.origin = "cross".to_string();
+                        new_pop.push(child);
+                        crossover_count += 1;
+                    } else if strategy < 0.8 {
+                        // Single mutation: clone a tournament winner and mutate
+                        let parent = tournament_select(&population, &mut rng);
+                        let mut child = parent.clone();
+                        child.mutate();
+                        child.origin = "mutant".to_string();
+                        new_pop.push(child);
+                        mutant_count += 1;
+                    } else {
+                        // Hypermutation: double mutation for extra exploration
+                        let parent = tournament_select(&population, &mut rng);
+                        let mut child = parent.clone();
+                        child.mutate();
+                        child.mutate();
+                        child.origin = "hyper".to_string();
+                        new_pop.push(child);
+                        hypermutant_count += 1;
+                    }
+                }
+                eprintln!("[breed] next gen: 1 elite + {} immigrants + {} crossover + {} mutants + {} hypermutants = {}",
+                    NUM_IMMIGRANTS, crossover_count, mutant_count, hypermutant_count, new_pop.len());
+                population = new_pop;
             }
-            eprintln!("[breed] next gen: 1 elite + {} immigrants + {} crossover + {} mutants + {} hypermutants = {}",
-                NUM_IMMIGRANTS, crossover_count, mutant_count, hypermutant_count, new_pop.len());
-            population = new_pop;
         }
     }
 
