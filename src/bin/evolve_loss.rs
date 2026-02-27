@@ -55,14 +55,14 @@ struct Genome {
 impl Genome {
     fn new_random() -> Self {
         let mut rng = rand::thread_rng();
-        let n_emb = *[8, 12, 16, 20, 24, 32].choose(&mut rng).unwrap();
+        let n_emb = *[4].choose(&mut rng).unwrap();
         let n_head = *[1, 2, 4].choose(&mut rng).unwrap();
         let mut g = Genome {
             n_emb,
             n_head,
-            n_layer: rng.gen_range(1..=3),
-            n_ctx: *[8, 12, 16, 24].choose(&mut rng).unwrap(),
-            n_ff_exp: rng.gen_range(1..=4),
+            n_layer: rng.gen_range(1..=7),
+            n_ctx: *[2, 3, 4, 5, 6, 7].choose(&mut rng).unwrap(),
+            n_ff_exp: rng.gen_range(1..=7),
             lr: 10f64.powf(rng.gen_range(-3.0..-1.3)),
             steps: *[200, 300, 500, 750, 1000, 1500].choose(&mut rng).unwrap(),
             loss: f64::MAX,
@@ -75,14 +75,14 @@ impl Genome {
 
     fn new_random_wide() -> Self {
         let mut rng = rand::thread_rng();
-        let n_emb = *[8, 16, 24, 32, 48, 64].choose(&mut rng).unwrap();
-        let n_head = *[1, 2, 4, 8].choose(&mut rng).unwrap();
+        let n_emb = *[4].choose(&mut rng).unwrap();
+        let n_head = *[1, 2, 4].choose(&mut rng).unwrap();
         let mut g = Genome {
             n_emb,
             n_head,
-            n_layer: rng.gen_range(1..=6),
-            n_ctx: *[8, 12, 16, 24, 32].choose(&mut rng).unwrap(),
-            n_ff_exp: rng.gen_range(1..=6),
+            n_layer: rng.gen_range(1..=7),
+            n_ctx: *[2, 3, 4, 5, 6, 7].choose(&mut rng).unwrap(),
+            n_ff_exp: rng.gen_range(1..=7),
             lr: 10f64.powf(rng.gen_range(-4.0..-1.0)),
             steps: *[300, 500, 1000, 1500, 2000, 3000].choose(&mut rng).unwrap(),
             loss: f64::MAX,
@@ -98,16 +98,16 @@ impl Genome {
         let num_mutations = rng.gen_range(1..=3);
         for _ in 0..num_mutations {
             match rng.gen_range(0..7) {
-                0 => self.n_emb = *[8, 12, 16, 20, 24, 32].choose(&mut rng).unwrap(),
+                0 => self.n_emb = 4,
                 1 => self.n_head = *[1, 2, 4].choose(&mut rng).unwrap(),
-                2 => self.n_layer = rng.gen_range(1..=4),
+                2 => self.n_layer = rng.gen_range(1..=7),
                 3 => self.lr = 10f64.powf(rng.gen_range(-3.0..-1.3)),
                 4 => {
                     let delta = *[-500, -250, -100, 100, 250, 500].choose(&mut rng).unwrap();
                     self.steps = (self.steps as i32 + delta).clamp(100, 2000) as usize;
                 },
-                5 => self.n_ctx = *[8, 12, 16, 24].choose(&mut rng).unwrap(),
-                6 => self.n_ff_exp = rng.gen_range(1..=4),
+                5 => self.n_ctx = *[2, 3, 4, 5, 6, 7].choose(&mut rng).unwrap(),
+                6 => self.n_ff_exp = rng.gen_range(1..=7),
                 _ => {},
             }
         }
@@ -164,14 +164,10 @@ impl Genome {
                 }
             }
             2 => {
-                // Expand context window (see more of the name)
-                self.n_ctx = match self.n_ctx {
-                    c if c < 12 => 12,
-                    c if c < 16 => 16,
-                    c if c < 24 => 24,
-                    c if c < 32 => 32,
-                    _ => self.n_ctx,
-                };
+                // Expand context window (one step up, capped at 7)
+                if self.n_ctx < 7 {
+                    self.n_ctx += 1;
+                }
             }
             3 => {
                 // Expand feed-forward (wider MLP)
