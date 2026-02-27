@@ -38,6 +38,7 @@ The evolution engine now operates at the **species level**, not just individual 
 - **Championship breeding**: On mild stagnation (2 gens), the top 3 winners are mated together with fine-tuning mutations. Elite is force re-evaluated.
 - **Cataclysm**: On deep stagnation (4+ gens), the population is blown up and rebuilt from an expanded search space, avoiding blacklisted species.
 - **Fine-tuning**: Championship mode generates variants of the winner with small LR/steps tweaks instead of random mutations.
+- **Complexity penalty**: Fitness = loss + 2% per log-unit of energy cost. Simpler organisms are preferred when loss is similar. Energy is estimated as params * steps.
 
 ### Stagnation Response Ladder
 

@@ -36,6 +36,7 @@ const STAGNATION_CHAMPIONSHIP: usize = 2; // Fine-tune the winner
 const STAGNATION_CATACLYSM: usize = 4;    // Blow up and start wider
 const LOSER_THRESHOLD: f64 = 2.3;         // Architectures with loss above this get blacklisted
 const LOSER_MIN_SAMPLES: usize = 2;       // Need this many bad samples to blacklist
+const COMPLEXITY_WEIGHT: f64 = 0.02;      // Penalty per log-unit of energy cost
 const INPUT_FILE: &str = "input.txt";
 
 #[derive(Clone, Debug)]
@@ -225,12 +226,27 @@ impl Genome {
         }
     }
 
-    fn desc(&self) -> String {
-        format!("Emb:{:<3} Head:{} Lay:{} Ctx:{:<2} FF:{} LR:{:.4} Steps:{:<4}",
-            self.n_emb, self.n_head, self.n_layer, self.n_ctx, self.n_ff_exp, self.lr, self.steps)
+    // Rough estimate of training energy: parameter count * steps.
+    // Prefers organisms that achieve good loss with less compute.
+    fn energy(&self) -> f64 {
+        let emb = self.n_emb as f64;
+        let params = 27.0 * emb                                  // token embeddings
+            + self.n_ctx as f64 * emb                             // position embeddings
+            + self.n_layer as f64 * (4.0 * emb * emb              // attention (QKV + out)
+                + 2.0 * emb * emb * self.n_ff_exp as f64);       // feed-forward
+        params * self.steps as f64
     }
 
-    // Species = architecture family (structural params only, ignoring LR/steps)
+    fn fitness(&self) -> f64 {
+        if self.loss >= f64::MAX / 2.0 { return f64::MAX; }
+        self.loss + COMPLEXITY_WEIGHT * self.energy().ln()
+    }
+
+    fn desc(&self) -> String {
+        format!("Emb:{:<3} Head:{} Lay:{} Ctx:{:<2} FF:{} LR:{:.4} Steps:{:<4} E:{:.0}",
+            self.n_emb, self.n_head, self.n_layer, self.n_ctx, self.n_ff_exp, self.lr, self.steps, self.energy())
+    }
+
     fn species(&self) -> String {
         format!("{}-{}-{}-{}-{}", self.n_emb, self.n_head, self.n_layer, self.n_ctx, self.n_ff_exp)
     }
@@ -275,7 +291,7 @@ fn tournament_select<'a>(pop: &'a [Genome], rng: &mut ThreadRng) -> &'a Genome {
     let mut best: Option<&Genome> = None;
     for _ in 0..TOURNAMENT_SIZE {
         let candidate = &pop[rng.gen_range(0..pop.len())];
-        if best.is_none() || candidate.loss < best.unwrap().loss {
+        if best.is_none() || candidate.fitness() < best.unwrap().fitness() {
             best = Some(candidate);
         }
     }
@@ -383,6 +399,7 @@ fn main() {
     log!(log_file, "Selection: tournament(k={}), {} immigrants/gen", TOURNAMENT_SIZE, NUM_IMMIGRANTS);
     log!(log_file, "Stagnation: championship@{}, cataclysm@{}", STAGNATION_CHAMPIONSHIP, STAGNATION_CATACLYSM);
     log!(log_file, "Blacklist: loss > {:.1} after {} samples", LOSER_THRESHOLD, LOSER_MIN_SAMPLES);
+    log!(log_file, "Complexity penalty: {:.0}% per log-unit energy", COMPLEXITY_WEIGHT * 100.0);
     log!(log_file, "");
 
     if std::fs::metadata(INPUT_FILE).is_err() {
@@ -396,11 +413,11 @@ fn main() {
     let mut best_ever = Genome::new_random();
     best_ever.loss = f64::MAX;
     let mut history: Vec<HistoryEntry> = Vec::new();
-    let mut gen_bests: Vec<(usize, f64, f64)> = Vec::new();
+    let mut gen_bests: Vec<(usize, f64, f64, f64)> = Vec::new();
     let total_start = Instant::now();
     let mut target_gen: Option<usize> = None;
     let mut stagnation_count: usize = 0;
-    let mut prev_best_loss: f64 = f64::MAX;
+    let mut prev_best_fitness: f64 = f64::MAX;
     let mut blacklist = Blacklist::new();
 
     for gen in 0..NUM_GENERATIONS {
@@ -412,7 +429,7 @@ fn main() {
             genome.evaluate(i + 1);
         });
 
-        population.sort_by(|a, b| a.loss.partial_cmp(&b.loss).unwrap());
+        population.sort_by(|a, b| a.fitness().partial_cmp(&b.fitness()).unwrap());
 
         // Record losers in the blacklist
         for g in &population {
@@ -427,35 +444,35 @@ fn main() {
 
         for (i, g) in population.iter().enumerate() {
             let marker = if i == 0 { ">" } else { " " };
-            log!(log_file, "{} #{}: {} | Loss: {:.4} [{}]", marker, i + 1, g.desc(), g.loss, g.origin);
+            log!(log_file, "{} #{}: {} | Loss: {:.4} Fit: {:.4} [{}]", marker, i + 1, g.desc(), g.loss, g.fitness(), g.origin);
             history.push(HistoryEntry { gen: gen + 1, genome: g.clone() });
         }
 
         let gen_best = &population[0];
         let gen_worst = &population[population.len() - 1];
-        if gen_best.loss < best_ever.loss {
+        if gen_best.fitness() < best_ever.fitness() {
             best_ever = gen_best.clone();
         }
         let diversity = num_species as f64 / POPULATION_SIZE as f64;
-        gen_bests.push((gen + 1, gen_best.loss, diversity));
+        gen_bests.push((gen + 1, gen_best.loss, gen_best.fitness(), diversity));
 
-        // Track stagnation
-        if (gen_best.loss - prev_best_loss).abs() < 1e-8 {
+        // Track stagnation (based on fitness, not raw loss)
+        if (gen_best.fitness() - prev_best_fitness).abs() < 1e-8 {
             stagnation_count += 1;
         } else {
             stagnation_count = 0;
         }
-        prev_best_loss = gen_best.loss;
+        prev_best_fitness = gen_best.fitness();
 
         if target_gen.is_none() && best_ever.loss < TARGET_LOSS {
             target_gen = Some(gen + 1);
             log!(log_file, "  ** Target {:.1} reached! Continuing to evolve... **", TARGET_LOSS);
         }
 
-        let spread = gen_worst.loss - gen_best.loss;
+        let spread = gen_worst.fitness() - gen_best.fitness();
         let elapsed = gen_start.elapsed().as_secs_f64();
-        log!(log_file, "  Best: {:.4} | Worst: {:.4} | Spread: {:.4} | Species: {} ({:.0}% largest) | Stagnation: {} | Blacklisted: {} | {:.0}s\n",
-            gen_best.loss, gen_worst.loss, spread, num_species, monoculture * 100.0,
+        log!(log_file, "  Best: {:.4} (fit {:.4}) | Worst: {:.4} | Spread: {:.4} | Species: {} ({:.0}% largest) | Stagnation: {} | Blacklisted: {} | {:.0}s\n",
+            gen_best.loss, gen_best.fitness(), gen_worst.loss, spread, num_species, monoculture * 100.0,
             stagnation_count, blacklist.len(), elapsed);
 
         // --- Breed the next generation ---
@@ -614,7 +631,7 @@ fn main() {
     log!(log_file, "  Generations: {}", NUM_GENERATIONS);
     log!(log_file, "  Total evaluations: {}", total_evals);
     log!(log_file, "  Total time: {:.0}s ({:.0}s/gen avg)", total_time, total_time / NUM_GENERATIONS as f64);
-    log!(log_file, "  Best loss: {:.4}", best_ever.loss);
+    log!(log_file, "  Best loss: {:.4} (fitness: {:.4})", best_ever.loss, best_ever.fitness());
     log!(log_file, "  Best config: {}", best_ever.desc());
     log!(log_file, "  Blacklisted species: {}", blacklist.len());
     if let Some(g) = target_gen {
@@ -624,16 +641,16 @@ fn main() {
     }
 
     log!(log_file, "\n--- Evolution Trajectory ---");
-    log!(log_file, "  {:>4}  {:>8}  {:>9}", "Gen", "Best", "Species");
-    for (gen, loss, div) in &gen_bests {
-        let bar_len = ((4.0 - loss) * 12.0).max(0.0).min(40.0) as usize;
+    log!(log_file, "  {:>4}  {:>8}  {:>8}  {:>9}", "Gen", "Loss", "Fitness", "Species");
+    for (gen, loss, fitness, div) in &gen_bests {
+        let bar_len = ((4.0 - fitness) * 12.0).max(0.0).min(40.0) as usize;
         let bar: String = "#".repeat(bar_len);
-        log!(log_file, "  {:>4}  {:>8.4}  {:>8.0}%  {}", gen, loss, div * 100.0, bar);
+        log!(log_file, "  {:>4}  {:>8.4}  {:>8.4}  {:>8.0}%  {}", gen, loss, fitness, div * 100.0, bar);
     }
 
     log!(log_file, "\n--- Top Configs Across All Generations ---");
     let mut sorted_history = history.clone();
-    sorted_history.sort_by(|a, b| a.genome.loss.partial_cmp(&b.genome.loss).unwrap());
+    sorted_history.sort_by(|a, b| a.genome.fitness().partial_cmp(&b.genome.fitness()).unwrap());
 
     let mut seen_sigs: HashSet<String> = HashSet::new();
     let mut unique_top: Vec<&HistoryEntry> = Vec::new();
@@ -645,8 +662,8 @@ fn main() {
     }
 
     for (i, entry) in unique_top.iter().enumerate() {
-        log!(log_file, "  {:2}. Gen {} | Loss {:.4} | {} [{}]",
-            i + 1, entry.gen, entry.genome.loss, entry.genome.desc(), entry.genome.origin);
+        log!(log_file, "  {:2}. Gen {} | Loss {:.4} Fit {:.4} | {} [{}]",
+            i + 1, entry.gen, entry.genome.loss, entry.genome.fitness(), entry.genome.desc(), entry.genome.origin);
     }
 
     log!(log_file, "\n--- Hyperparameter Analysis ---");
