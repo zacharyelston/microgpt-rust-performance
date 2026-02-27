@@ -22,6 +22,11 @@ A minimalist Rust implementation of a self-evolving Transformer (GPT), porting K
 │       └── evolve_loss.rs # Loss evolution engine v2 (species-aware)
 ├── genome.json            # The organism's evolved DNA (written by evolution)
 ├── experiments/           # Auto-generated experiment logs (timestamped)
+├── research/             # Analysis reports from evolution experiments
+│   ├── embedding_size_analysis.md  # Scaling curve Emb:4-32
+│   ├── emb4_10gen_complexity_penalty.md  # Emb:4, 10 generations
+│   ├── emb4_20gen_long_run.md     # Emb:4, 20 generations deep study
+│   └── emb2_8_spectrum_sweep.md   # Emb:2-8 mixed competition
 ├── Cargo.toml            # Rust dependencies (rand, rayon, chrono)
 ├── input.txt             # Training dataset (names from makemore)
 ├── README.md             # Project documentation
