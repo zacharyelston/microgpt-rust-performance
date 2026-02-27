@@ -4,7 +4,7 @@
 */
 
 use rand::Rng;
-use std::{cell::RefCell, collections::HashSet, ops::{Add, Mul, Neg, Sub}, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, io::Write, ops::{Add, Mul, Neg, Sub}, rc::Rc};
 
 // --- I. The Atom: Value & Autograd ---
 
@@ -58,7 +58,6 @@ impl Val {
 
 // --- II. The Algebra: Operators ---
 
-// We export the macro for use in other crates/modules
 #[macro_export]
 macro_rules! op {
     ($t:ident, $f:ident, $op:tt, $dg_self:expr, $dg_other:expr) => {
@@ -87,11 +86,6 @@ impl Neg for Val { type Output = Val; fn neg(self) -> Val { &self * &Val::new(-1
 
 pub type Vec1 = Vec<Val>;
 pub type Mat2 = Vec<Vec1>;
-
-// Constants needed for initialization/norm, passed as params or kept generic?
-// For simplicity in this specific project, we'll keep them effectively hardcoded or passed in.
-// But wait, `mat` used `CFG.init_scale`. We should probably pass that in or make it a constant here.
-// Let's pass it in to `mat`.
 
 pub fn mat(r: usize, c: usize, scale: f64) -> Mat2 {
     let mut rng = rand::thread_rng();
@@ -185,7 +179,7 @@ impl GPT {
     }
 }
 
-// --- IV. Training & Generation Exposed ---
+// --- IV. Training & Generation ---
 
 #[derive(Clone, Debug)]
 pub struct TrainingConfig {
@@ -203,6 +197,7 @@ pub struct TrainingConfig {
     pub rms_eps: f64,
     pub init_scale: f64,
     pub input_file: String,
+    pub checkpoint_interval: usize,
 }
 
 impl Default for TrainingConfig {
@@ -213,27 +208,47 @@ impl Default for TrainingConfig {
             adam_beta1: 0.85, adam_beta2: 0.99, adam_eps: 1e-8,
             gen_samples: 5, rms_eps: 1e-5, init_scale: 0.1,
             input_file: "input.txt".to_string(),
+            checkpoint_interval: 20,
         }
     }
 }
 
-pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> Vec<String> {
-    // 1. Load Data
-    let raw = std::fs::read_to_string(&cfg.input_file).unwrap_or_else(|_| "emma\nolivia\nava\n".to_string());
-    let chars: Vec<char> = { 
-        let mut c: Vec<_> = raw.chars().collect::<HashSet<_>>().into_iter().filter(|c| !c.is_whitespace()).collect(); 
-        c.sort(); 
-        c 
-    };
+#[derive(Clone, Debug)]
+pub struct TrainingResult {
+    pub names: Vec<String>,
+    pub final_loss: f64,
+    pub num_params: usize,
+}
+
+pub fn load_training_data(input_file: &str) -> String {
+    std::fs::read_to_string(input_file).unwrap_or_else(|e| {
+        panic!("Failed to read training data from '{}': {}", input_file, e);
+    })
+}
+
+pub fn build_vocab(raw: &str) -> Vec<char> {
+    let mut c: Vec<_> = raw.chars().collect::<HashSet<_>>().into_iter().filter(|c| !c.is_whitespace()).collect();
+    c.sort();
+    c
+}
+
+pub fn train_and_generate(cfg: &TrainingConfig, silent: bool) -> TrainingResult {
+    let raw = load_training_data(&cfg.input_file);
+    let chars = build_vocab(&raw);
     let vocab = chars.len() + 1;
     
-    // 2. Init Model
     let model = GPT::new(vocab, cfg.n_ctx, cfg.n_emb, cfg.n_layer, cfg.n_head, cfg.n_ff_exp, cfg.init_scale, cfg.rms_eps);
     let params = model.params();
+    let num_params = params.len();
     
-    // 3. Train
+    if !silent {
+        println!("MicroGPT: {} params, training for {} steps (lr={}, emb={}, head={}, layer={}, ctx={}, ff={})",
+            num_params, cfg.steps, cfg.lr, cfg.n_emb, cfg.n_head, cfg.n_layer, cfg.n_ctx, cfg.n_ff_exp);
+    }
+    
     let (mut m, mut v) = (vec![0.; params.len()], vec![0.; params.len()]);
     let docs: Vec<&str> = raw.lines().collect();
+    let mut final_loss = 0.0;
     
     for step in 0..cfg.steps {
         let doc = docs[step % docs.len()];
@@ -250,6 +265,7 @@ pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> Vec<String> {
             loss = &loss - &probs[tokens[p+1]].log();
         }
         loss = &loss * &Val::new((tokens.len() as f64 - 1.).recip());
+        final_loss = loss.data();
         
         for p in &params { p.zero(); }
         loss.backward();
@@ -263,9 +279,15 @@ pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> Vec<String> {
             let v_hat = v[i] / (1. - cfg.adam_beta2.powi(step as i32 + 1));
             p.0.borrow_mut().data -= lr_t * m_hat / (v_hat.sqrt() + cfg.adam_eps);
         }
+
+        if !silent && step % cfg.checkpoint_interval == 0 {
+            print!("step {:4} | loss {:.4}\r", step, final_loss);
+            std::io::stdout().flush().unwrap();
+        }
     }
     
-    // 4. Generate
+    if !silent { println!("\n--- Generation ---"); }
+
     let mut results = Vec::new();
     for _ in 0..cfg.gen_samples {
         let (mut kc, mut vc) = (vec![vec![]; cfg.n_layer], vec![vec![]; cfg.n_layer]);
@@ -286,7 +308,9 @@ pub fn train_and_generate(cfg: &TrainingConfig, _silent: bool) -> Vec<String> {
             if tok == vocab - 1 { break; }
             name.push(chars[tok]);
         }
+        if !silent { println!("> {}", name); }
         results.push(name);
     }
-    results
+
+    TrainingResult { names: results, final_loss, num_params }
 }

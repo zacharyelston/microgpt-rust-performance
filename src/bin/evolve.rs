@@ -8,15 +8,13 @@
     to maximize aesthetic fitness of generated names.
 */
 
-use microgpt_rust::{train_and_generate, TrainingConfig};
+use microgpt_rust::{load_training_data, train_and_generate, TrainingConfig};
 use rand::prelude::*;
 use rayon::prelude::*;
 use std::collections::HashSet;
-use std::fs;
 use std::time::Instant;
 
-// Configuration
-const POPULATION_SIZE: usize = 12; // Matches Python parallel version
+const POPULATION_SIZE: usize = 12;
 const GENERATIONS: usize = 5;
 const ELITISM: usize = 2;
 const INPUT_FILE: &str = "input.txt";
@@ -58,16 +56,15 @@ impl Genome {
             _ => {},
         }
         self.enforce_constraints();
-        self.fitness = 0.0; // Reset fitness
+        self.fitness = 0.0;
         self.names.clear();
     }
 
     fn enforce_constraints(&mut self) {
         if self.n_emb % self.n_head != 0 {
-            self.n_head = 2; // Fallback
+            self.n_head = 2;
         }
         if self.n_emb % self.n_head != 0 {
-             // If still invalid, adjust emb
              self.n_emb = (self.n_emb / self.n_head) * self.n_head;
              if self.n_emb == 0 { self.n_emb = self.n_head; }
         }
@@ -75,7 +72,7 @@ impl Genome {
 
     fn evaluate(&mut self, training_data: &HashSet<String>) {
         if self.fitness != 0.0 && !self.names.is_empty() {
-            return; // Already evaluated
+            return;
         }
 
         let config = TrainingConfig {
@@ -88,18 +85,15 @@ impl Genome {
             ..Default::default()
         };
 
-        // Run training and generation (this handles the heavy lifting)
-        let generated_names = train_and_generate(&config, true); // silent=true
+        let result = train_and_generate(&config, true);
+        let score = calculate_fitness(&result.names, training_data);
         
-        // Calculate fitness
-        let score = calculate_fitness(&generated_names, training_data);
-        
-        self.names = generated_names;
+        self.names = result.names;
         self.fitness = score;
     }
 }
 
-// --- Judge Logic (Ported from judge.py) ---
+// --- Judge Logic ---
 
 fn calculate_fitness(names: &[String], training_data: &HashSet<String>) -> f64 {
     if names.is_empty() { return -100.0; }
@@ -115,7 +109,6 @@ fn calculate_fitness(names: &[String], training_data: &HashSet<String>) -> f64 {
         let s_sym = score_symmetry(&name);
         let s_creat = score_creativity(&name, training_data);
 
-        // Weighted sum: Flow * 1.0 + Sym * 1.2 + Creat * 2.0
         total_score += s_flow * 1.0 + s_sym * 1.2 + s_creat * 2.0;
         valid_count += 1;
     }
@@ -153,12 +146,10 @@ fn score_symmetry(name: &str) -> f64 {
     let mut score = 0.0;
     let chars: Vec<char> = name.chars().collect();
     
-    // Palindrome
     if name.len() > 3 && chars.iter().eq(chars.iter().rev()) {
         score += 2.0;
     }
 
-    // Repeating sub-patterns
     if name.len() >= 4 {
         let mid = name.len() / 2;
         if name[..mid] == name[mid..mid*2] {
@@ -166,7 +157,6 @@ fn score_symmetry(name: &str) -> f64 {
         }
     }
 
-    // Soft endings
     if name.ends_with('a') || name.ends_with('n') || name.ends_with('y') {
         score += 0.2;
     }
@@ -187,25 +177,19 @@ fn main() {
     println!("--- Starting Aesthetic Evolution (Rust Edition) ---");
     println!("Pop: {}, Gens: {}, Threads: Parallel", POPULATION_SIZE, GENERATIONS);
 
-    // Load training data once for judge
-    let raw = fs::read_to_string(INPUT_FILE).unwrap_or_default();
+    let raw = load_training_data(INPUT_FILE);
     let training_data: HashSet<String> = raw.lines().map(|l| l.trim().to_lowercase()).collect();
 
-    // Init Population
     let mut population: Vec<Genome> = (0..POPULATION_SIZE).map(|_| Genome::new_random()).collect();
 
     for gen in 0..GENERATIONS {
         let start_time = Instant::now();
         println!("\n=== Generation {}/{} ===", gen + 1, GENERATIONS);
 
-        // Parallel Evaluation
-        // We use par_iter_mut to evaluate in parallel
         population.par_iter_mut().enumerate().for_each(|(_i, genome)| {
-             // Note: _i is not reliable for printing in order during parallel exec, so we just run
              genome.evaluate(&training_data);
         });
 
-        // Print results (after parallel step to keep output clean)
         for (i, g) in population.iter().enumerate() {
             println!("Org {}: [Emb:{} Head:{} Lay:{} LR:{:.5}] -> Score: {:.4}", 
                 i+1, g.n_emb, g.n_head, g.n_layer, g.lr, g.fitness);
@@ -217,22 +201,18 @@ fn main() {
         let gen_time = start_time.elapsed();
         println!("--- Generation Time: {:.2?} ---", gen_time);
 
-        // Sort by fitness (descending)
         population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
         
         let best = &population[0];
         println!("\n>> Gen {} Champion: [Emb:{} Head:{} Lay:{} LR:{:.5}]", gen+1, best.n_emb, best.n_head, best.n_layer, best.lr);
         println!(">> Score: {:.4}", best.fitness);
 
-        // Elitism & Reproduction
         if gen < GENERATIONS - 1 {
             let mut new_pop = Vec::with_capacity(POPULATION_SIZE);
-            // Elitism
             for i in 0..ELITISM {
                 new_pop.push(population[i].clone());
             }
             
-            // Fill rest
             let mut rng = rand::thread_rng();
             while new_pop.len() < POPULATION_SIZE {
                 let parent = &population[rng.gen_range(0..ELITISM)];
