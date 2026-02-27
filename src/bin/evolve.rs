@@ -177,6 +177,11 @@ fn main() {
     println!("--- Starting Aesthetic Evolution (Rust Edition) ---");
     println!("Pop: {}, Gens: {}, Threads: Parallel", POPULATION_SIZE, GENERATIONS);
 
+    if std::fs::metadata(INPUT_FILE).is_err() {
+        let _ = std::process::Command::new("curl")
+            .args(["-o", INPUT_FILE, "https://raw.githubusercontent.com/karpathy/makemore/master/names.txt"])
+            .output();
+    }
     let raw = load_training_data(INPUT_FILE);
     let training_data: HashSet<String> = raw.lines().map(|l| l.trim().to_lowercase()).collect();
 
