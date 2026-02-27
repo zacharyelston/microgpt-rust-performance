@@ -56,7 +56,7 @@ struct Genome {
 impl Genome {
     fn new_random() -> Self {
         let mut rng = rand::thread_rng();
-        let n_emb = *[2, 3, 4, 5].choose(&mut rng).unwrap();
+        let n_emb = *[2, 3, 4, 5, 6].choose(&mut rng).unwrap();
         let n_head = *[1, 2, 4].choose(&mut rng).unwrap();
         let mut g = Genome {
             n_emb,
@@ -76,7 +76,7 @@ impl Genome {
 
     fn new_random_wide() -> Self {
         let mut rng = rand::thread_rng();
-        let n_emb = *[2, 3, 4, 5].choose(&mut rng).unwrap();
+        let n_emb = *[2, 3, 4, 5, 6].choose(&mut rng).unwrap();
         let n_head = *[1, 2, 4].choose(&mut rng).unwrap();
         let mut g = Genome {
             n_emb,
@@ -99,7 +99,7 @@ impl Genome {
         let num_mutations = rng.gen_range(1..=3);
         for _ in 0..num_mutations {
             match rng.gen_range(0..7) {
-                0 => self.n_emb = *[2, 3, 4, 5].choose(&mut rng).unwrap(),
+                0 => self.n_emb = *[2, 3, 4, 5, 6].choose(&mut rng).unwrap(),
                 1 => self.n_head = *[1, 2, 4].choose(&mut rng).unwrap(),
                 2 => self.n_layer = rng.gen_range(1..=7),
                 3 => self.lr = 10f64.powf(rng.gen_range(-3.0..-1.3)),
