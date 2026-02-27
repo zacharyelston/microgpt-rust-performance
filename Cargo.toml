@@ -7,6 +7,7 @@ default-run = "microgpt_rust"
 [dependencies]
 rand = "0.8"
 rayon = "1.10"
+chrono = "0.4"
 
 [profile.release]
 opt-level = 3

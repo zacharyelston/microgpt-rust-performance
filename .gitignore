@@ -1,4 +1,5 @@
 /target
 output_*.txt
+experiments/
 __pycache__/
 *.pyc

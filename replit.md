@@ -12,8 +12,9 @@ A minimalist Rust implementation of a Transformer (GPT), porting Karpathy's micr
 │   ├── main.rs           # Main binary: CLI training + generation
 │   └── bin/
 │       ├── evolve.rs     # Aesthetic evolution binary (parallel via rayon)
-│       └── evolve_loss.rs # Loss-targeting evolution binary (target < 1.9)
-├── Cargo.toml            # Rust dependencies (rand, rayon)
+│       └── evolve_loss.rs # Loss-targeting evolution binary (target < 1.2)
+├── experiments/           # Auto-generated experiment logs (timestamped)
+├── Cargo.toml            # Rust dependencies (rand, rayon, chrono)
 ├── input.txt             # Training dataset (names from makemore)
 ├── analyze_*.py          # Python analysis scripts for scaling experiments
 ├── run_*.sh              # Shell scripts for parameter sweep experiments
@@ -39,12 +40,16 @@ cargo run --release --bin evolve_loss     # Loss-targeting evolution (< 1.9)
 - `train_and_generate()` shared function used by all binaries
 - `load_training_data()` and `build_vocab()` shared data loading
 - Aesthetic evolution: fitness scoring (flow, symmetry, creativity)
-- Loss evolution: targets loss < 1.9 with crossover + mutation
+- Loss evolution: targets loss < 1.2, tournament selection, diversity-aware
+  - Experiment results saved to `experiments/evolve_YYYYMMDD_HHMMSS.log`
+  - Debug logging via stderr for real-time organism evaluation tracking
+  - Panic recovery: crashed configs get MAX loss instead of killing the run
 
 ## Dependencies
 
 - `rand = "0.8"` — random number generation
 - `rayon = "1.10"` — parallel iteration for evolutionary engines
+- `chrono = "0.4"` — timestamped experiment filenames
 
 ## Workflow
 

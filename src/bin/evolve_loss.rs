@@ -15,10 +15,12 @@ use microgpt_rust::{load_training_data, train_and_generate, TrainingConfig};
 use rand::prelude::*;
 use rayon::prelude::*;
 use std::collections::HashSet;
+use std::io::Write;
+use std::sync::Mutex;
 use std::time::Instant;
 
 const POPULATION_SIZE: usize = 8;
-const NUM_GENERATIONS: usize = 5;
+const NUM_GENERATIONS: usize = 10;
 const TOURNAMENT_SIZE: usize = 3;
 const NUM_IMMIGRANTS: usize = 2;
 const TARGET_LOSS: f64 = 1.2;
@@ -191,12 +193,34 @@ struct HistoryEntry {
     genome: Genome,
 }
 
+macro_rules! log {
+    ($log:expr, $($arg:tt)*) => {{
+        let msg = format!($($arg)*);
+        println!("{}", msg);
+        if let Some(ref f) = *$log.lock().unwrap() {
+            let _ = writeln!(f.try_clone().unwrap(), "{}", msg);
+        }
+    }};
+}
+
+fn experiment_filename() -> String {
+    let now = chrono::Local::now();
+    format!("experiments/evolve_{}.log", now.format("%Y%m%d_%H%M%S"))
+}
+
 fn main() {
-    println!("=== MicroGPT Loss Evolution Engine ===");
-    println!("Target: loss < {:.1}", TARGET_LOSS);
-    println!("Population: {}, Generations: {}", POPULATION_SIZE, NUM_GENERATIONS);
-    println!("Selection: tournament(k={}), {} random immigrants/gen", TOURNAMENT_SIZE, NUM_IMMIGRANTS);
-    println!();
+    std::fs::create_dir_all("experiments").ok();
+    let log_path = experiment_filename();
+    let log_file: Mutex<Option<std::fs::File>> = Mutex::new(
+        std::fs::File::create(&log_path).ok()
+    );
+
+    log!(log_file, "=== MicroGPT Loss Evolution Engine ===");
+    log!(log_file, "Experiment: {}", log_path);
+    log!(log_file, "Target: loss < {:.1}", TARGET_LOSS);
+    log!(log_file, "Population: {}, Generations: {}", POPULATION_SIZE, NUM_GENERATIONS);
+    log!(log_file, "Selection: tournament(k={}), {} random immigrants/gen", TOURNAMENT_SIZE, NUM_IMMIGRANTS);
+    log!(log_file, "");
 
     if std::fs::metadata(INPUT_FILE).is_err() {
         let _ = std::process::Command::new("curl")
@@ -215,7 +239,7 @@ fn main() {
 
     for gen in 0..NUM_GENERATIONS {
         let gen_start = Instant::now();
-        println!("--- Generation {}/{} ---", gen + 1, NUM_GENERATIONS);
+        log!(log_file, "--- Generation {}/{} ---", gen + 1, NUM_GENERATIONS);
 
         eprintln!("[gen {}] evaluating {} organisms...", gen + 1, population.len());
         population.par_iter_mut().enumerate().for_each(|(i, genome)| {
@@ -228,7 +252,7 @@ fn main() {
 
         for (i, g) in population.iter().enumerate() {
             let marker = if i == 0 { ">" } else { " " };
-            println!("{} #{}: {} | Loss: {:.4}", marker, i + 1, g.desc(), g.loss);
+            log!(log_file, "{} #{}: {} | Loss: {:.4}", marker, i + 1, g.desc(), g.loss);
             history.push(HistoryEntry { gen: gen + 1, genome: g.clone() });
         }
 
@@ -241,12 +265,12 @@ fn main() {
 
         if target_gen.is_none() && best_ever.loss < TARGET_LOSS {
             target_gen = Some(gen + 1);
-            println!("  ** Target {:.1} reached! Continuing to evolve... **", TARGET_LOSS);
+            log!(log_file, "  ** Target {:.1} reached! Continuing to evolve... **", TARGET_LOSS);
         }
 
         let spread = gen_worst.loss - gen_best.loss;
         let elapsed = gen_start.elapsed().as_secs_f64();
-        println!("  Best: {:.4} | Worst: {:.4} | Spread: {:.4} | Diversity: {}/{} ({:.0}%) | {:.0}s\n",
+        log!(log_file, "  Best: {:.4} | Worst: {:.4} | Spread: {:.4} | Diversity: {}/{} ({:.0}%) | {:.0}s\n",
             gen_best.loss, gen_worst.loss, spread, unique, POPULATION_SIZE, diversity * 100.0, elapsed);
 
         if gen < NUM_GENERATIONS - 1 {
@@ -303,29 +327,29 @@ fn main() {
     let total_time = total_start.elapsed().as_secs_f64();
     let total_evals = history.len();
 
-    println!("========================================");
-    println!("       EVOLUTION COMPLETE");
-    println!("========================================");
-    println!("  Generations: {}", NUM_GENERATIONS);
-    println!("  Total evaluations: {}", total_evals);
-    println!("  Total time: {:.0}s ({:.0}s/gen avg)", total_time, total_time / NUM_GENERATIONS as f64);
-    println!("  Best loss: {:.4}", best_ever.loss);
-    println!("  Best config: {}", best_ever.desc());
+    log!(log_file, "========================================");
+    log!(log_file, "       EVOLUTION COMPLETE");
+    log!(log_file, "========================================");
+    log!(log_file, "  Generations: {}", NUM_GENERATIONS);
+    log!(log_file, "  Total evaluations: {}", total_evals);
+    log!(log_file, "  Total time: {:.0}s ({:.0}s/gen avg)", total_time, total_time / NUM_GENERATIONS as f64);
+    log!(log_file, "  Best loss: {:.4}", best_ever.loss);
+    log!(log_file, "  Best config: {}", best_ever.desc());
     if let Some(g) = target_gen {
-        println!("  Target {:.1} first reached: generation {}", TARGET_LOSS, g);
+        log!(log_file, "  Target {:.1} first reached: generation {}", TARGET_LOSS, g);
     } else {
-        println!("  Target {:.1} NOT reached", TARGET_LOSS);
+        log!(log_file, "  Target {:.1} NOT reached", TARGET_LOSS);
     }
 
-    println!("\n--- Evolution Trajectory ---");
-    println!("  {:>4}  {:>8}  {:>9}", "Gen", "Best", "Diversity");
+    log!(log_file, "\n--- Evolution Trajectory ---");
+    log!(log_file, "  {:>4}  {:>8}  {:>9}", "Gen", "Best", "Diversity");
     for (gen, loss, div) in &gen_bests {
         let bar_len = ((4.0 - loss) * 12.0).max(0.0).min(40.0) as usize;
         let bar: String = "#".repeat(bar_len);
-        println!("  {:>4}  {:>8.4}  {:>8.0}%  {}", gen, loss, div * 100.0, bar);
+        log!(log_file, "  {:>4}  {:>8.4}  {:>8.0}%  {}", gen, loss, div * 100.0, bar);
     }
 
-    println!("\n--- Top Configs Across All Generations ---");
+    log!(log_file, "\n--- Top Configs Across All Generations ---");
     let mut sorted_history = history.clone();
     sorted_history.sort_by(|a, b| a.genome.loss.partial_cmp(&b.genome.loss).unwrap());
 
@@ -339,10 +363,10 @@ fn main() {
     }
 
     for (i, entry) in unique_top.iter().enumerate() {
-        println!("  {:2}. Gen {} | Loss {:.4} | {}", i + 1, entry.gen, entry.genome.loss, entry.genome.desc());
+        log!(log_file, "  {:2}. Gen {} | Loss {:.4} | {}", i + 1, entry.gen, entry.genome.loss, entry.genome.desc());
     }
 
-    println!("\n--- Hyperparameter Analysis ---");
+    log!(log_file, "\n--- Hyperparameter Analysis ---");
 
     let top_n = std::cmp::min(10, sorted_history.len());
     let top_configs: Vec<&Genome> = sorted_history.iter().take(top_n).map(|e| &e.genome).collect();
@@ -352,7 +376,7 @@ fn main() {
         genomes.iter().map(|g| f(g)).sum::<f64>() / genomes.len() as f64
     }
 
-    println!("  {:12} {:>10} {:>10} {:>10}", "Param", "Top 10", "Bottom 10", "Delta");
+    log!(log_file, "  {:12} {:>10} {:>10} {:>10}", "Param", "Top 10", "Bottom 10", "Delta");
 
     let params: Vec<(&str, fn(&Genome) -> f64)> = vec![
         ("Embedding", |g: &Genome| g.n_emb as f64),
@@ -372,13 +396,13 @@ fn main() {
             else if delta > 0.0 { " ^" }
             else { " v" };
         if *name == "Learn Rate" {
-            println!("  {:12} {:>10.4} {:>10.4} {:>+9.4}{}", name, top_avg, bot_avg, delta, arrow);
+            log!(log_file, "  {:12} {:>10.4} {:>10.4} {:>+9.4}{}", name, top_avg, bot_avg, delta, arrow);
         } else {
-            println!("  {:12} {:>10.1} {:>10.1} {:>+9.1}{}", name, top_avg, bot_avg, delta, arrow);
+            log!(log_file, "  {:12} {:>10.1} {:>10.1} {:>+9.1}{}", name, top_avg, bot_avg, delta, arrow);
         }
     }
 
-    println!("\n--- Insights ---");
+    log!(log_file, "\n--- Insights ---");
     let mut insights = Vec::new();
 
     let top_layer = avg_f(&top_configs, |g| g.n_layer as f64);
@@ -416,14 +440,16 @@ fn main() {
     }
 
     if insights.is_empty() {
-        println!("  No strong hyperparameter trends detected (more generations may help).");
+        log!(log_file, "  No strong hyperparameter trends detected (more generations may help).");
     } else {
         for insight in &insights {
-            println!("  - {}", insight);
+            log!(log_file, "  - {}", insight);
         }
     }
 
-    println!("\n--- Final Demo with Best Config ---");
+    log!(log_file, "\n--- Final Demo with Best Config ---");
     let result = train_and_generate(&best_ever.to_config(10), false);
-    println!("Final loss: {:.4}", result.final_loss);
+    log!(log_file, "Final loss: {:.4}", result.final_loss);
+
+    log!(log_file, "\nExperiment saved to: {}", log_path);
 }
