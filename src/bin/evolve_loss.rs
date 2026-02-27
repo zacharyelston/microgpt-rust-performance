@@ -51,6 +51,7 @@ struct Genome {
     steps: usize,    // Training steps
     loss: f64,       // Fitness (lower is better)
     evaluated: bool, // Whether this organism has been trained
+    origin: String,  // How this organism was created (for output clarity)
 }
 
 impl Genome {
@@ -69,6 +70,7 @@ impl Genome {
             steps: *[200, 300, 500, 750, 1000, 1500].choose(&mut rng).unwrap(),
             loss: f64::MAX,
             evaluated: false,
+            origin: "random".to_string(),
         };
         g.enforce_constraints();
         g
@@ -188,6 +190,7 @@ fn crossover(a: &Genome, b: &Genome) -> Genome {
         steps: if rng.gen() { a.steps } else { b.steps },
         loss: f64::MAX,
         evaluated: false,
+        origin: "cross".to_string(),
     };
     child.enforce_constraints();
     child
@@ -287,7 +290,7 @@ fn main() {
 
         for (i, g) in population.iter().enumerate() {
             let marker = if i == 0 { ">" } else { " " };
-            log!(log_file, "{} #{}: {} | Loss: {:.4}", marker, i + 1, g.desc(), g.loss);
+            log!(log_file, "{} #{}: {} | Loss: {:.4} [{}]", marker, i + 1, g.desc(), g.loss, g.origin);
             history.push(HistoryEntry { gen: gen + 1, genome: g.clone() });
         }
 
@@ -314,7 +317,9 @@ fn main() {
             let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
 
             // Keep the single best organism unchanged (elitism = 1)
-            new_pop.push(population[0].clone());
+            let mut elite = population[0].clone();
+            elite.origin = "elite".to_string();
+            new_pop.push(elite);
             eprintln!("[breed] kept elite: {}", population[0].desc());
 
             let mut rng = rand::thread_rng();
@@ -322,7 +327,8 @@ fn main() {
             // Inject random immigrants for diversity
             for i in 0..NUM_IMMIGRANTS {
                 if new_pop.len() < POPULATION_SIZE {
-                    let immigrant = Genome::new_random();
+                    let mut immigrant = Genome::new_random();
+                    immigrant.origin = "immigrant".to_string();
                     eprintln!("[breed] immigrant {}: {}", i + 1, immigrant.desc());
                     new_pop.push(immigrant);
                 }
@@ -341,6 +347,7 @@ fn main() {
                     let p2 = tournament_select(&population, &mut rng);
                     let mut child = crossover(p1, p2);
                     child.mutate();
+                    child.origin = "cross".to_string();
                     new_pop.push(child);
                     crossover_count += 1;
                 } else if strategy < 0.8 {
@@ -348,6 +355,7 @@ fn main() {
                     let parent = tournament_select(&population, &mut rng);
                     let mut child = parent.clone();
                     child.mutate();
+                    child.origin = "mutant".to_string();
                     new_pop.push(child);
                     mutant_count += 1;
                 } else {
@@ -356,6 +364,7 @@ fn main() {
                     let mut child = parent.clone();
                     child.mutate();
                     child.mutate();
+                    child.origin = "hyper".to_string();
                     new_pop.push(child);
                     hypermutant_count += 1;
                 }
