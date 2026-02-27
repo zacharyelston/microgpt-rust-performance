@@ -2,6 +2,26 @@
 
 > A minimal GPT that evolves itself.
 
+```
+Last Evolution (v2) — 10 generations, 80 evaluations, 1820s
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Gen 1   1.5278  ████████████████████░░░░  8 species  [random]
+  Gen 2   1.5278  ████████████████████░░░░  8 species  [elite]
+  Gen 3   1.5278  ████████████████████░░░░  8 species  ← stagnation
+      *** CHAMPIONSHIP: breeding winners with growth ***
+  Gen 4   1.5886  ███████████████████░░░░░  6 species  [re-eval] [grown] [champion]
+  Gen 5   1.5232  ████████████████████░░░░  7 species  [immigrant] broke through
+  Gen 6   1.5232  ████████████████████░░░░  7 species
+  Gen 7   1.5232  ████████████████████░░░░  7 species  ← stagnation
+      *** CHAMPIONSHIP: breeding winners with growth ***
+  Gen 8   1.4960  █████████████████████░░░  6 species  [grown] emerged
+  Gen 9   1.4960  █████████████████████░░░  7 species
+  Gen 10  1.4676  █████████████████████░░░  8 species  [cross] new best
+
+  Winner: Emb:24 Head:2 Lay:1 Ctx:32 FF:3 LR:0.0119 Steps:500
+  Blacklisted: 1 species (24-1-1-24-3, avg loss 2.83)
+```
+
 A self-modifying Transformer implementation in Rust with zero ML dependencies. Starting from [Andrej Karpathy's microGPT](https://karpathy.github.io/2026/02/12/microgpt/), the project adds a spark of life: an evolutionary engine that discovers optimal hyperparameters and writes them back into the organism, transforming what the program becomes.
 
 ## The Lifecycle
