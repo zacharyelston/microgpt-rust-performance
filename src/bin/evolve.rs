@@ -20,7 +20,7 @@ const POPULATION_SIZE: usize = 12; // Matches Python parallel version
 const GENERATIONS: usize = 5;
 const ELITISM: usize = 2;
 const INPUT_FILE: &str = "input.txt";
-const TRAIN_STEPS: usize = 300;
+const TRAIN_STEPS: usize = 600;
 
 #[derive(Clone, Debug)]
 struct Genome {
@@ -37,10 +37,10 @@ impl Genome {
     fn new_random() -> Self {
         let mut rng = rand::thread_rng();
         let mut g = Genome {
-            n_emb: *[16, 24, 32].choose(&mut rng).unwrap(),
-            n_head: *[2, 4].choose(&mut rng).unwrap(),
-            n_layer: rng.gen_range(1..=3),
-            lr: rng.gen_range(0.001..0.015),
+            n_emb: *[32, 48, 64].choose(&mut rng).unwrap(),
+            n_head: *[4, 8].choose(&mut rng).unwrap(),
+            n_layer: rng.gen_range(2..=5),
+            lr: rng.gen_range(0.0005..0.005),
             fitness: 0.0,
             loss: 0.0,
             names: Vec::new(),
@@ -53,10 +53,10 @@ impl Genome {
         let mut rng = rand::thread_rng();
         let choice = rng.gen_range(0..4);
         match choice {
-            0 => self.n_emb = *[16, 24, 32, 40].choose(&mut rng).unwrap(),
-            1 => self.n_head = *[2, 4].choose(&mut rng).unwrap(),
-            2 => self.n_layer = (self.n_layer as i32 + *[-1, 1].choose(&mut rng).unwrap()).max(1).min(4) as usize,
-            3 => self.lr = (self.lr * rng.gen_range(0.7..1.3)).max(0.0001).min(0.1),
+            0 => self.n_emb = *[32, 48, 64, 80].choose(&mut rng).unwrap(),
+            1 => self.n_head = *[4, 8].choose(&mut rng).unwrap(),
+            2 => self.n_layer = (self.n_layer as i32 + *[-1, 1].choose(&mut rng).unwrap()).max(2).min(6) as usize,
+            3 => self.lr = (self.lr * rng.gen_range(0.7..1.3)).max(0.0001).min(0.01),
             _ => {},
         }
         self.enforce_constraints();
@@ -67,7 +67,7 @@ impl Genome {
 
     fn enforce_constraints(&mut self) {
         if self.n_emb % self.n_head != 0 {
-            self.n_head = 2; // Fallback
+            self.n_head = 4; // Fallback
         }
         if self.n_emb % self.n_head != 0 {
              // If still invalid, adjust emb
@@ -98,10 +98,17 @@ impl Genome {
         let (generated_names, final_loss) = train_and_generate(&config, true); // silent=true
         
         // Calculate fitness
-        let score = calculate_fitness(&generated_names, training_data);
+        let aesthetic_score = calculate_fitness(&generated_names, training_data);
         
+        // New Fitness: Balance Aesthetics with Loss
+        // We want to maximize fitness.
+        // Higher aesthetic score is good.
+        // Lower loss is good.
+        // Formula: (Aesthetic + 1) / Loss
+        let combined_fitness = (aesthetic_score + 1.0) / final_loss.max(0.0001);
+
         self.names = generated_names;
-        self.fitness = score;
+        self.fitness = combined_fitness;
         self.loss = final_loss;
     }
 }
