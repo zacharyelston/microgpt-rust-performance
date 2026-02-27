@@ -181,6 +181,8 @@ impl GPT {
 
 // --- IV. Training & Generation ---
 
+const GENOME_FILE: &str = "genome.json";
+
 #[derive(Clone, Debug)]
 pub struct TrainingConfig {
     pub n_emb: usize,
@@ -210,6 +212,44 @@ impl Default for TrainingConfig {
             input_file: "input.txt".to_string(),
             checkpoint_interval: 20,
         }
+    }
+}
+
+impl TrainingConfig {
+    pub fn save_genome(&self, loss: f64, generation: usize) -> std::io::Result<()> {
+        let json = format!(
+            "{{\n  \"n_emb\": {},\n  \"n_ctx\": {},\n  \"n_layer\": {},\n  \"n_head\": {},\n  \"n_ff_exp\": {},\n  \"steps\": {},\n  \"lr\": {},\n  \"loss\": {},\n  \"generation\": {},\n  \"evolved\": true\n}}",
+            self.n_emb, self.n_ctx, self.n_layer, self.n_head, self.n_ff_exp,
+            self.steps, self.lr, loss, generation
+        );
+        std::fs::write(GENOME_FILE, json)
+    }
+
+    pub fn load_genome() -> Option<(TrainingConfig, f64, usize)> {
+        let data = std::fs::read_to_string(GENOME_FILE).ok()?;
+        let mut cfg = TrainingConfig::default();
+        let mut loss = 0.0;
+        let mut gen = 0;
+        for line in data.lines() {
+            let line = line.trim().trim_end_matches(',');
+            if let Some((key, val)) = line.split_once(':') {
+                let key = key.trim().trim_matches('"');
+                let val = val.trim();
+                match key {
+                    "n_emb" => cfg.n_emb = val.parse().unwrap_or(cfg.n_emb),
+                    "n_ctx" => cfg.n_ctx = val.parse().unwrap_or(cfg.n_ctx),
+                    "n_layer" => cfg.n_layer = val.parse().unwrap_or(cfg.n_layer),
+                    "n_head" => cfg.n_head = val.parse().unwrap_or(cfg.n_head),
+                    "n_ff_exp" => cfg.n_ff_exp = val.parse().unwrap_or(cfg.n_ff_exp),
+                    "steps" => cfg.steps = val.parse().unwrap_or(cfg.steps),
+                    "lr" => cfg.lr = val.parse().unwrap_or(cfg.lr),
+                    "loss" => loss = val.parse().unwrap_or(0.0),
+                    "generation" => gen = val.parse().unwrap_or(0),
+                    _ => {}
+                }
+            }
+        }
+        Some((cfg, loss, gen))
     }
 }
 

@@ -447,8 +447,26 @@ fn main() {
         }
     }
 
+    let best_config = best_ever.to_config(10);
+    let best_gen = sorted_history.iter()
+        .find(|e| e.genome.loss == best_ever.loss)
+        .map(|e| e.gen)
+        .unwrap_or(0);
+
+    match best_config.save_genome(best_ever.loss, best_gen) {
+        Ok(_) => {
+            log!(log_file, "\n--- Genome Written ---");
+            log!(log_file, "  Saved to genome.json (generation {})", best_gen);
+            log!(log_file, "  The organism has evolved.");
+            log!(log_file, "  Run `cargo run --release` to see the new creature.");
+        }
+        Err(e) => {
+            log!(log_file, "\n  Warning: failed to save genome: {}", e);
+        }
+    }
+
     log!(log_file, "\n--- Final Demo with Best Config ---");
-    let result = train_and_generate(&best_ever.to_config(10), false);
+    let result = train_and_generate(&best_config, false);
     log!(log_file, "Final loss: {:.4}", result.final_loss);
 
     log!(log_file, "\nExperiment saved to: {}", log_path);

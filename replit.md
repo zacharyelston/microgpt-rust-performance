@@ -1,18 +1,26 @@
-# MicroGPT: The Art of Symmetry
+# MicroGPT: A Living Transformer
 
 ## Overview
 
-A minimalist Rust implementation of a Transformer (GPT), porting Karpathy's microGPT with automatic differentiation from scratch. Includes parallel evolutionary engines that evolve hyperparameters for aesthetic name generation and loss minimization.
+A minimalist Rust implementation of a self-evolving Transformer (GPT), porting Karpathy's microGPT with automatic differentiation from scratch. The program evolves itself: the evolution engine discovers optimal hyperparameters and writes them to `genome.json`, transforming what the main program becomes.
+
+## How It Works
+
+1. **Primordial state**: `cargo run --release` runs with default parameters
+2. **Evolution**: `cargo run --release --bin evolve_loss` evolves hyperparameters across generations
+3. **Self-modification**: Evolution writes the winning genome to `genome.json`
+4. **Evolved state**: `cargo run --release` now runs as the evolved creature
 
 ## Project Structure
 
 ```
 ├── src/
-│   ├── lib.rs            # Shared library: Val autograd, GPT model, training logic
-│   ├── main.rs           # Main binary: CLI training + generation
+│   ├── lib.rs            # Shared library: Val autograd, GPT model, genome save/load
+│   ├── main.rs           # Main binary: runs as evolved or primordial creature
 │   └── bin/
 │       ├── evolve.rs     # Aesthetic evolution binary (parallel via rayon)
-│       └── evolve_loss.rs # Loss-targeting evolution binary (target < 1.2)
+│       └── evolve_loss.rs # Loss-targeting evolution engine (target < 1.2)
+├── genome.json            # The organism's evolved DNA (written by evolution)
 ├── experiments/           # Auto-generated experiment logs (timestamped)
 ├── Cargo.toml            # Rust dependencies (rand, rayon, chrono)
 ├── input.txt             # Training dataset (names from makemore)
@@ -25,9 +33,9 @@ A minimalist Rust implementation of a Transformer (GPT), porting Karpathy's micr
 ## Running
 
 ```bash
-cargo run --release                       # Main training + generation
+cargo run --release                       # Run the creature (evolved or primordial)
+cargo run --release --bin evolve_loss     # Evolve — rewrites genome.json
 cargo run --release --bin evolve          # Aesthetic evolutionary search
-cargo run --release --bin evolve_loss     # Loss-targeting evolution (< 1.9)
 ```
 
 ## Architecture
@@ -35,15 +43,15 @@ cargo run --release --bin evolve_loss     # Loss-targeting evolution (< 1.9)
 - `Val` type with `Rc<RefCell<Node>>` for autograd computation graph
 - Operator overloading via `op!` macro (Add, Sub, Mul)
 - GPT struct: embeddings, multi-head attention, MLP, RMSNorm
-- `TrainingConfig` struct for parameterized training
+- `TrainingConfig` struct with `save_genome()` / `load_genome()` for self-modification
 - `TrainingResult` struct returns names, final_loss, num_params
 - `train_and_generate()` shared function used by all binaries
 - `load_training_data()` and `build_vocab()` shared data loading
 - Aesthetic evolution: fitness scoring (flow, symmetry, creativity)
-- Loss evolution: targets loss < 1.2, tournament selection, diversity-aware
+- Loss evolution: tournament selection, diversity-aware, panic recovery
   - Experiment results saved to `experiments/evolve_YYYYMMDD_HHMMSS.log`
   - Debug logging via stderr for real-time organism evaluation tracking
-  - Panic recovery: crashed configs get MAX loss instead of killing the run
+  - Writes `genome.json` on completion — the program becomes its best self
 
 ## Dependencies
 
@@ -53,4 +61,4 @@ cargo run --release --bin evolve_loss     # Loss-targeting evolution (< 1.9)
 
 ## Workflow
 
-- **Start application**: `cargo run --release --bin evolve_loss` (console output)
+- **Start application**: `cargo run --release --bin evolve_loss` (evolution engine)
