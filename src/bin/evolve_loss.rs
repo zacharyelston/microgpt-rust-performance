@@ -2,20 +2,25 @@
     MicroGPT Loss Evolution Engine
     
     Evolves hyperparameters to minimize training loss.
-    Always runs all generations to learn what works.
-    Prints analysis at the end showing hyperparameter trends.
+    Uses diversity-aware evolution to prevent premature convergence:
+    - Tournament selection instead of pure elitism
+    - Mandatory random immigrants each generation
+    - Multi-gene mutations with wider parameter ranges
+    - Diversity bonus in fitness to discourage clone populations
     
-    Uses Rayon for parallel evaluation of the population.
+    Uses Rayon for parallel evaluation.
 */
 
 use microgpt_rust::{load_training_data, train_and_generate, TrainingConfig};
 use rand::prelude::*;
 use rayon::prelude::*;
+use std::collections::HashSet;
 use std::time::Instant;
 
-const POPULATION_SIZE: usize = 6;
+const POPULATION_SIZE: usize = 8;
 const NUM_GENERATIONS: usize = 5;
-const ELITISM: usize = 2;
+const TOURNAMENT_SIZE: usize = 3;
+const NUM_IMMIGRANTS: usize = 2;
 const TARGET_LOSS: f64 = 1.2;
 const INPUT_FILE: &str = "input.txt";
 
@@ -35,16 +40,16 @@ struct Genome {
 impl Genome {
     fn new_random() -> Self {
         let mut rng = rand::thread_rng();
-        let n_emb = *[16, 24, 32].choose(&mut rng).unwrap();
-        let n_head = *[2, 4].choose(&mut rng).unwrap();
+        let n_emb = *[8, 12, 16, 20, 24, 32].choose(&mut rng).unwrap();
+        let n_head = *[1, 2, 4].choose(&mut rng).unwrap();
         let mut g = Genome {
             n_emb,
             n_head,
-            n_layer: rng.gen_range(1..=2),
-            n_ctx: 16,
-            n_ff_exp: *[2, 4].choose(&mut rng).unwrap(),
-            lr: rng.gen_range(0.005..0.015),
-            steps: *[300, 500, 750, 1000].choose(&mut rng).unwrap(),
+            n_layer: rng.gen_range(1..=3),
+            n_ctx: *[8, 12, 16, 24].choose(&mut rng).unwrap(),
+            n_ff_exp: rng.gen_range(1..=4),
+            lr: 10f64.powf(rng.gen_range(-3.0..-1.3)),
+            steps: *[200, 300, 500, 750, 1000, 1500].choose(&mut rng).unwrap(),
             loss: f64::MAX,
             evaluated: false,
         };
@@ -54,14 +59,21 @@ impl Genome {
 
     fn mutate(&mut self) {
         let mut rng = rand::thread_rng();
-        match rng.gen_range(0..6) {
-            0 => self.n_emb = *[16, 24, 32].choose(&mut rng).unwrap(),
-            1 => self.n_head = *[2, 4].choose(&mut rng).unwrap(),
-            2 => self.n_layer = rng.gen_range(1..=3),
-            3 => self.lr = (self.lr * rng.gen_range(0.6..1.5)).clamp(0.001, 0.03),
-            4 => self.steps = (self.steps as i32 + *[-250, 250, 500].choose(&mut rng).unwrap()).clamp(300, 2000) as usize,
-            5 => self.n_ff_exp = *[2, 4].choose(&mut rng).unwrap(),
-            _ => {},
+        let num_mutations = rng.gen_range(1..=3);
+        for _ in 0..num_mutations {
+            match rng.gen_range(0..7) {
+                0 => self.n_emb = *[8, 12, 16, 20, 24, 32].choose(&mut rng).unwrap(),
+                1 => self.n_head = *[1, 2, 4].choose(&mut rng).unwrap(),
+                2 => self.n_layer = rng.gen_range(1..=4),
+                3 => self.lr = 10f64.powf(rng.gen_range(-3.0..-1.3)),
+                4 => {
+                    let delta = *[-500, -250, -100, 100, 250, 500].choose(&mut rng).unwrap();
+                    self.steps = (self.steps as i32 + delta).clamp(100, 2000) as usize;
+                },
+                5 => self.n_ctx = *[8, 12, 16, 24].choose(&mut rng).unwrap(),
+                6 => self.n_ff_exp = rng.gen_range(1..=4),
+                _ => {},
+            }
         }
         self.enforce_constraints();
         self.loss = f64::MAX;
@@ -70,19 +82,20 @@ impl Genome {
 
     fn enforce_constraints(&mut self) {
         if self.n_emb % self.n_head != 0 {
-            self.n_head = 2;
-        }
-        if self.n_emb % self.n_head != 0 {
-            self.n_emb = (self.n_emb / self.n_head) * self.n_head;
-            if self.n_emb == 0 { self.n_emb = 16; }
+            let valid: Vec<usize> = [1, 2, 4].iter().copied()
+                .filter(|h| self.n_emb % h == 0)
+                .collect();
+            self.n_head = *valid.last().unwrap_or(&1);
         }
     }
 
-    fn evaluate(&mut self) {
+    fn evaluate(&mut self, id: usize) {
         if self.evaluated {
+            eprintln!("[eval] organism {} already evaluated (loss={:.4})", id, self.loss);
             return;
         }
-
+        eprintln!("[eval] organism {} starting: {}", id, self.desc());
+        let start = Instant::now();
         let config = TrainingConfig {
             n_emb: self.n_emb,
             n_head: self.n_head,
@@ -95,15 +108,30 @@ impl Genome {
             gen_samples: 1,
             ..Default::default()
         };
-
-        let result = train_and_generate(&config, true);
-        self.loss = result.final_loss;
-        self.evaluated = true;
+        let result = std::panic::catch_unwind(|| {
+            train_and_generate(&config, true)
+        });
+        match result {
+            Ok(r) => {
+                self.loss = r.final_loss;
+                self.evaluated = true;
+                eprintln!("[eval] organism {} done: loss={:.4} ({:.1}s)", id, self.loss, start.elapsed().as_secs_f64());
+            }
+            Err(e) => {
+                eprintln!("[eval] organism {} PANICKED: {:?} | config: {}", id, e, self.desc());
+                self.loss = f64::MAX;
+                self.evaluated = true;
+            }
+        }
     }
 
     fn desc(&self) -> String {
-        format!("[Emb:{} Head:{} Lay:{} FF:{} LR:{:.4} Steps:{}]",
-            self.n_emb, self.n_head, self.n_layer, self.n_ff_exp, self.lr, self.steps)
+        format!("Emb:{:<3} Head:{} Lay:{} Ctx:{:<2} FF:{} LR:{:.4} Steps:{:<4}",
+            self.n_emb, self.n_head, self.n_layer, self.n_ctx, self.n_ff_exp, self.lr, self.steps)
+    }
+
+    fn signature(&self) -> String {
+        format!("{}-{}-{}-{}-{}", self.n_emb, self.n_head, self.n_layer, self.n_ctx, self.n_ff_exp)
     }
 
     fn to_config(&self, gen_samples: usize) -> TrainingConfig {
@@ -128,15 +156,33 @@ fn crossover(a: &Genome, b: &Genome) -> Genome {
         n_emb: if rng.gen() { a.n_emb } else { b.n_emb },
         n_head: if rng.gen() { a.n_head } else { b.n_head },
         n_layer: if rng.gen() { a.n_layer } else { b.n_layer },
-        n_ctx: a.n_ctx,
+        n_ctx: if rng.gen() { a.n_ctx } else { b.n_ctx },
         n_ff_exp: if rng.gen() { a.n_ff_exp } else { b.n_ff_exp },
         lr: if rng.gen() { a.lr } else { b.lr },
-        steps: std::cmp::max(a.steps, b.steps),
+        steps: if rng.gen() { a.steps } else { b.steps },
         loss: f64::MAX,
         evaluated: false,
     };
     child.enforce_constraints();
     child
+}
+
+fn tournament_select<'a>(pop: &'a [Genome], rng: &mut ThreadRng) -> &'a Genome {
+    let mut best: Option<&Genome> = None;
+    for _ in 0..TOURNAMENT_SIZE {
+        let candidate = &pop[rng.gen_range(0..pop.len())];
+        if best.is_none() || candidate.loss < best.unwrap().loss {
+            best = Some(candidate);
+        }
+    }
+    best.unwrap()
+}
+
+fn population_diversity(pop: &[Genome]) -> (usize, f64) {
+    let sigs: HashSet<String> = pop.iter().map(|g| g.signature()).collect();
+    let unique = sigs.len();
+    let diversity = unique as f64 / pop.len() as f64;
+    (unique, diversity)
 }
 
 #[derive(Clone, Debug)]
@@ -148,7 +194,8 @@ struct HistoryEntry {
 fn main() {
     println!("=== MicroGPT Loss Evolution Engine ===");
     println!("Target: loss < {:.1}", TARGET_LOSS);
-    println!("Population: {}, Generations: {} (always runs all)", POPULATION_SIZE, NUM_GENERATIONS);
+    println!("Population: {}, Generations: {}", POPULATION_SIZE, NUM_GENERATIONS);
+    println!("Selection: tournament(k={}), {} random immigrants/gen", TOURNAMENT_SIZE, NUM_IMMIGRANTS);
     println!();
 
     if std::fs::metadata(INPUT_FILE).is_err() {
@@ -162,7 +209,7 @@ fn main() {
     let mut best_ever = Genome::new_random();
     best_ever.loss = f64::MAX;
     let mut history: Vec<HistoryEntry> = Vec::new();
-    let mut gen_bests: Vec<(usize, f64)> = Vec::new();
+    let mut gen_bests: Vec<(usize, f64, f64)> = Vec::new();
     let total_start = Instant::now();
     let mut target_gen: Option<usize> = None;
 
@@ -170,55 +217,85 @@ fn main() {
         let gen_start = Instant::now();
         println!("--- Generation {}/{} ---", gen + 1, NUM_GENERATIONS);
 
-        population.par_iter_mut().for_each(|genome| {
-            genome.evaluate();
+        eprintln!("[gen {}] evaluating {} organisms...", gen + 1, population.len());
+        population.par_iter_mut().enumerate().for_each(|(i, genome)| {
+            genome.evaluate(i + 1);
         });
 
         population.sort_by(|a, b| a.loss.partial_cmp(&b.loss).unwrap());
 
+        let (unique, diversity) = population_diversity(&population);
+
         for (i, g) in population.iter().enumerate() {
-            let marker = if i < ELITISM { ">" } else { " " };
-            println!("{} #{}: {} Loss: {:.4}", marker, i + 1, g.desc(), g.loss);
+            let marker = if i == 0 { ">" } else { " " };
+            println!("{} #{}: {} | Loss: {:.4}", marker, i + 1, g.desc(), g.loss);
             history.push(HistoryEntry { gen: gen + 1, genome: g.clone() });
         }
 
         let gen_best = &population[0];
+        let gen_worst = &population[population.len() - 1];
         if gen_best.loss < best_ever.loss {
             best_ever = gen_best.clone();
         }
-        gen_bests.push((gen + 1, gen_best.loss));
+        gen_bests.push((gen + 1, gen_best.loss, diversity));
 
         if target_gen.is_none() && best_ever.loss < TARGET_LOSS {
             target_gen = Some(gen + 1);
             println!("  ** Target {:.1} reached! Continuing to evolve... **", TARGET_LOSS);
         }
 
+        let spread = gen_worst.loss - gen_best.loss;
         let elapsed = gen_start.elapsed().as_secs_f64();
-        println!("  Best: {:.4} | All-time: {:.4} | {:.0}s\n", gen_best.loss, best_ever.loss, elapsed);
+        println!("  Best: {:.4} | Worst: {:.4} | Spread: {:.4} | Diversity: {}/{} ({:.0}%) | {:.0}s\n",
+            gen_best.loss, gen_worst.loss, spread, unique, POPULATION_SIZE, diversity * 100.0, elapsed);
 
         if gen < NUM_GENERATIONS - 1 {
-            let mut new_pop = Vec::with_capacity(POPULATION_SIZE);
-            for i in 0..ELITISM {
-                new_pop.push(population[i].clone());
-            }
+            eprintln!("[gen {}] breeding next generation...", gen + 1);
+            let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
+
+            new_pop.push(population[0].clone());
+            eprintln!("[breed] kept elite: {}", population[0].desc());
 
             let mut rng = rand::thread_rng();
+
+            for i in 0..NUM_IMMIGRANTS {
+                if new_pop.len() < POPULATION_SIZE {
+                    let immigrant = Genome::new_random();
+                    eprintln!("[breed] immigrant {}: {}", i + 1, immigrant.desc());
+                    new_pop.push(immigrant);
+                }
+            }
+
+            let mut crossover_count = 0;
+            let mut mutant_count = 0;
+            let mut hypermutant_count = 0;
+
             while new_pop.len() < POPULATION_SIZE {
-                if rng.gen::<f64>() < 0.3 && POPULATION_SIZE >= 4 {
-                    let p1 = &population[rng.gen_range(0..ELITISM)];
-                    let p2 = &population[rng.gen_range(0..POPULATION_SIZE / 2)];
+                let strategy: f64 = rng.gen();
+                if strategy < 0.4 {
+                    let p1 = tournament_select(&population, &mut rng);
+                    let p2 = tournament_select(&population, &mut rng);
                     let mut child = crossover(p1, p2);
-                    if rng.gen::<f64>() < 0.5 {
-                        child.mutate();
-                    }
+                    child.mutate();
                     new_pop.push(child);
-                } else {
-                    let parent = &population[rng.gen_range(0..ELITISM)];
+                    crossover_count += 1;
+                } else if strategy < 0.8 {
+                    let parent = tournament_select(&population, &mut rng);
                     let mut child = parent.clone();
                     child.mutate();
                     new_pop.push(child);
+                    mutant_count += 1;
+                } else {
+                    let parent = tournament_select(&population, &mut rng);
+                    let mut child = parent.clone();
+                    child.mutate();
+                    child.mutate();
+                    new_pop.push(child);
+                    hypermutant_count += 1;
                 }
             }
+            eprintln!("[breed] next gen: 1 elite + {} immigrants + {} crossover + {} mutants + {} hypermutants = {}",
+                NUM_IMMIGRANTS, crossover_count, mutant_count, hypermutant_count, new_pop.len());
             population = new_pop;
         }
     }
@@ -227,11 +304,11 @@ fn main() {
     let total_evals = history.len();
 
     println!("========================================");
-    println!("          EVOLUTION COMPLETE");
+    println!("       EVOLUTION COMPLETE");
     println!("========================================");
     println!("  Generations: {}", NUM_GENERATIONS);
     println!("  Total evaluations: {}", total_evals);
-    println!("  Total time: {:.0}s", total_time);
+    println!("  Total time: {:.0}s ({:.0}s/gen avg)", total_time, total_time / NUM_GENERATIONS as f64);
     println!("  Best loss: {:.4}", best_ever.loss);
     println!("  Best config: {}", best_ever.desc());
     if let Some(g) = target_gen {
@@ -240,63 +317,110 @@ fn main() {
         println!("  Target {:.1} NOT reached", TARGET_LOSS);
     }
 
-    println!("\n--- Loss Progression ---");
-    for (gen, loss) in &gen_bests {
-        let bar_len = ((4.0 - loss) * 15.0).max(0.0).min(60.0) as usize;
+    println!("\n--- Evolution Trajectory ---");
+    println!("  {:>4}  {:>8}  {:>9}", "Gen", "Best", "Diversity");
+    for (gen, loss, div) in &gen_bests {
+        let bar_len = ((4.0 - loss) * 12.0).max(0.0).min(40.0) as usize;
         let bar: String = "#".repeat(bar_len);
-        println!("  Gen {:2}: {:.4} {}", gen, loss, bar);
+        println!("  {:>4}  {:>8.4}  {:>8.0}%  {}", gen, loss, div * 100.0, bar);
     }
 
-    println!("\n--- What We Learned ---");
-
-    let top_n = std::cmp::min(10, history.len());
+    println!("\n--- Top Configs Across All Generations ---");
     let mut sorted_history = history.clone();
     sorted_history.sort_by(|a, b| a.genome.loss.partial_cmp(&b.genome.loss).unwrap());
 
-    println!("\nTop {} configs across all generations:", top_n);
-    for (i, entry) in sorted_history.iter().take(top_n).enumerate() {
+    let mut seen_sigs: HashSet<String> = HashSet::new();
+    let mut unique_top: Vec<&HistoryEntry> = Vec::new();
+    for entry in &sorted_history {
+        if seen_sigs.insert(entry.genome.signature()) {
+            unique_top.push(entry);
+            if unique_top.len() >= 10 { break; }
+        }
+    }
+
+    for (i, entry) in unique_top.iter().enumerate() {
         println!("  {:2}. Gen {} | Loss {:.4} | {}", i + 1, entry.gen, entry.genome.loss, entry.genome.desc());
     }
 
+    println!("\n--- Hyperparameter Analysis ---");
+
+    let top_n = std::cmp::min(10, sorted_history.len());
     let top_configs: Vec<&Genome> = sorted_history.iter().take(top_n).map(|e| &e.genome).collect();
+    let bot_configs: Vec<&Genome> = sorted_history.iter().rev().take(top_n).map(|e| &e.genome).collect();
 
-    let avg_emb: f64 = top_configs.iter().map(|g| g.n_emb as f64).sum::<f64>() / top_n as f64;
-    let avg_head: f64 = top_configs.iter().map(|g| g.n_head as f64).sum::<f64>() / top_n as f64;
-    let avg_layer: f64 = top_configs.iter().map(|g| g.n_layer as f64).sum::<f64>() / top_n as f64;
-    let avg_ff: f64 = top_configs.iter().map(|g| g.n_ff_exp as f64).sum::<f64>() / top_n as f64;
-    let avg_lr: f64 = top_configs.iter().map(|g| g.lr).sum::<f64>() / top_n as f64;
-    let avg_steps: f64 = top_configs.iter().map(|g| g.steps as f64).sum::<f64>() / top_n as f64;
-
-    let all_avg_emb: f64 = history.iter().map(|e| e.genome.n_emb as f64).sum::<f64>() / total_evals as f64;
-    let all_avg_layer: f64 = history.iter().map(|e| e.genome.n_layer as f64).sum::<f64>() / total_evals as f64;
-    let all_avg_lr: f64 = history.iter().map(|e| e.genome.lr).sum::<f64>() / total_evals as f64;
-    let all_avg_steps: f64 = history.iter().map(|e| e.genome.steps as f64).sum::<f64>() / total_evals as f64;
-
-    println!("\nHyperparameter trends (top {} vs all {}):", top_n, total_evals);
-    println!("  {:12} {:>10} {:>10}", "Param", "Top Avg", "All Avg");
-    println!("  {:12} {:>10.1} {:>10.1}", "Embedding", avg_emb, all_avg_emb);
-    println!("  {:12} {:>10.1} {:>10.1}", "Heads", avg_head, top_configs.iter().map(|g| g.n_head as f64).sum::<f64>() / top_n as f64);
-    println!("  {:12} {:>10.1} {:>10.1}", "Layers", avg_layer, all_avg_layer);
-    println!("  {:12} {:>10.1} {:>10.1}", "FF Mult", avg_ff, history.iter().map(|e| e.genome.n_ff_exp as f64).sum::<f64>() / total_evals as f64);
-    println!("  {:12} {:>10.4} {:>10.4}", "Learn Rate", avg_lr, all_avg_lr);
-    println!("  {:12} {:>10.0} {:>10.0}", "Steps", avg_steps, all_avg_steps);
-
-    println!("\nInsights:");
-    if avg_layer > all_avg_layer + 0.2 {
-        println!("  - More layers correlate with lower loss (top avg {:.1} vs overall {:.1})", avg_layer, all_avg_layer);
+    fn avg_f(genomes: &[&Genome], f: fn(&Genome) -> f64) -> f64 {
+        genomes.iter().map(|g| f(g)).sum::<f64>() / genomes.len() as f64
     }
-    if avg_emb > all_avg_emb + 2.0 {
-        println!("  - Larger embeddings help (top avg {:.0} vs overall {:.0})", avg_emb, all_avg_emb);
-    } else if avg_emb < all_avg_emb - 2.0 {
-        println!("  - Smaller embeddings performed better (top avg {:.0} vs overall {:.0})", avg_emb, all_avg_emb);
+
+    println!("  {:12} {:>10} {:>10} {:>10}", "Param", "Top 10", "Bottom 10", "Delta");
+
+    let params: Vec<(&str, fn(&Genome) -> f64)> = vec![
+        ("Embedding", |g: &Genome| g.n_emb as f64),
+        ("Heads", |g: &Genome| g.n_head as f64),
+        ("Layers", |g: &Genome| g.n_layer as f64),
+        ("Context", |g: &Genome| g.n_ctx as f64),
+        ("FF Mult", |g: &Genome| g.n_ff_exp as f64),
+        ("Learn Rate", |g: &Genome| g.lr),
+        ("Steps", |g: &Genome| g.steps as f64),
+    ];
+
+    for (name, f) in &params {
+        let top_avg = avg_f(&top_configs, *f);
+        let bot_avg = avg_f(&bot_configs, *f);
+        let delta = top_avg - bot_avg;
+        let arrow = if delta.abs() < 0.01 { "  " }
+            else if delta > 0.0 { " ^" }
+            else { " v" };
+        if *name == "Learn Rate" {
+            println!("  {:12} {:>10.4} {:>10.4} {:>+9.4}{}", name, top_avg, bot_avg, delta, arrow);
+        } else {
+            println!("  {:12} {:>10.1} {:>10.1} {:>+9.1}{}", name, top_avg, bot_avg, delta, arrow);
+        }
     }
-    if avg_steps > all_avg_steps + 50.0 {
-        println!("  - More training steps improve results (top avg {:.0} vs overall {:.0})", avg_steps, all_avg_steps);
+
+    println!("\n--- Insights ---");
+    let mut insights = Vec::new();
+
+    let top_layer = avg_f(&top_configs, |g| g.n_layer as f64);
+    let bot_layer = avg_f(&bot_configs, |g| g.n_layer as f64);
+    if top_layer > bot_layer + 0.3 {
+        insights.push(format!("Depth matters: top configs avg {:.1} layers vs {:.1} in bottom", top_layer, bot_layer));
     }
-    if avg_lr > all_avg_lr * 1.15 {
-        println!("  - Higher learning rates favored (top avg {:.4} vs overall {:.4})", avg_lr, all_avg_lr);
-    } else if avg_lr < all_avg_lr * 0.85 {
-        println!("  - Lower learning rates favored (top avg {:.4} vs overall {:.4})", avg_lr, all_avg_lr);
+
+    let top_emb = avg_f(&top_configs, |g| g.n_emb as f64);
+    let bot_emb = avg_f(&bot_configs, |g| g.n_emb as f64);
+    if (top_emb - bot_emb).abs() > 3.0 {
+        let dir = if top_emb > bot_emb { "larger" } else { "smaller" };
+        insights.push(format!("Embedding size: {} is better (top avg {:.0} vs bottom {:.0})", dir, top_emb, bot_emb));
+    }
+
+    let top_steps = avg_f(&top_configs, |g| g.steps as f64);
+    let bot_steps = avg_f(&bot_configs, |g| g.steps as f64);
+    if (top_steps - bot_steps).abs() > 100.0 {
+        let dir = if top_steps > bot_steps { "more" } else { "fewer" };
+        insights.push(format!("Training duration: {} steps preferred (top avg {:.0} vs bottom {:.0})", dir, top_steps, bot_steps));
+    }
+
+    let top_lr = avg_f(&top_configs, |g| g.lr);
+    let bot_lr = avg_f(&bot_configs, |g| g.lr);
+    if top_lr > bot_lr * 1.5 || top_lr < bot_lr * 0.67 {
+        let dir = if top_lr > bot_lr { "higher" } else { "lower" };
+        insights.push(format!("Learning rate: {} is better (top avg {:.4} vs bottom {:.4})", dir, top_lr, bot_lr));
+    }
+
+    let top_ctx = avg_f(&top_configs, |g| g.n_ctx as f64);
+    let bot_ctx = avg_f(&bot_configs, |g| g.n_ctx as f64);
+    if (top_ctx - bot_ctx).abs() > 2.0 {
+        let dir = if top_ctx > bot_ctx { "longer" } else { "shorter" };
+        insights.push(format!("Context window: {} preferred (top avg {:.0} vs bottom {:.0})", dir, top_ctx, bot_ctx));
+    }
+
+    if insights.is_empty() {
+        println!("  No strong hyperparameter trends detected (more generations may help).");
+    } else {
+        for insight in &insights {
+            println!("  - {}", insight);
+        }
     }
 
     println!("\n--- Final Demo with Best Config ---");

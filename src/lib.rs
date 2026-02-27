@@ -252,9 +252,12 @@ pub fn train_and_generate(cfg: &TrainingConfig, silent: bool) -> TrainingResult 
     
     for step in 0..cfg.steps {
         let doc = docs[step % docs.len()];
-        let tokens: Vec<usize> = std::iter::once(vocab-1)
+        let mut tokens: Vec<usize> = std::iter::once(vocab-1)
             .chain(doc.chars().map(|c| chars.iter().position(|&x| x == c).unwrap()))
             .chain(std::iter::once(vocab-1)).collect();
+        if tokens.len() > cfg.n_ctx {
+            tokens.truncate(cfg.n_ctx);
+        }
 
         let mut loss = Val::new(0.);
         let (mut kc, mut vc) = (vec![vec![]; cfg.n_layer], vec![vec![]; cfg.n_layer]);
