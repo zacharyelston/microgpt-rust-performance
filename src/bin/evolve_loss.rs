@@ -946,7 +946,7 @@ fn main() {
             LOSER_THRESHOLD,
             LOSER_MIN_SAMPLES
         );
-        let mut bl_entries: Vec<_> = blacklist
+        let mut bl_entries: Vec<_> = species_blacklist
             .failures
             .iter()
             .filter(|(_, v)| v.len() >= LOSER_MIN_SAMPLES)
