@@ -1,0 +1,170 @@
+=== MicroGPT Loss Evolution Engine ===
+Experiment: experiments/evolve_20260227_015504.log
+Target: loss < 1.2
+Population: 8, Generations: 10
+Selection: tournament(k=3), 2 random immigrants/gen
+
+--- Generation 1/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:16 FF:1 LR:0.0038 Steps:500  | Loss: 1.5676
+  #2: Emb:24  Head:2 Lay:1 Ctx:16 FF:1 LR:0.0214 Steps:500  | Loss: 1.6806
+  #3: Emb:20  Head:2 Lay:1 Ctx:12 FF:3 LR:0.0097 Steps:750  | Loss: 1.8824
+  #4: Emb:20  Head:1 Lay:1 Ctx:16 FF:4 LR:0.0017 Steps:750  | Loss: 1.9772
+  #5: Emb:24  Head:2 Lay:3 Ctx:16 FF:3 LR:0.0204 Steps:1500 | Loss: 2.0119
+  #6: Emb:20  Head:2 Lay:3 Ctx:12 FF:3 LR:0.0114 Steps:750  | Loss: 2.0506
+  #7: Emb:8   Head:2 Lay:2 Ctx:8  FF:1 LR:0.0308 Steps:1500 | Loss: 2.1184
+  #8: Emb:8   Head:4 Lay:2 Ctx:8  FF:3 LR:0.0014 Steps:1000 | Loss: 2.1224
+  Best: 1.5676 | Worst: 2.1224 | Spread: 0.5548 | Diversity: 8/8 (100%) | 382s
+
+--- Generation 2/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:24  Head:4 Lay:1 Ctx:16 FF:1 LR:0.0038 Steps:500  | Loss: 1.5676
+  #3: Emb:24  Head:2 Lay:1 Ctx:16 FF:2 LR:0.0038 Steps:500  | Loss: 1.5834
+  #4: Emb:20  Head:1 Lay:2 Ctx:16 FF:1 LR:0.0319 Steps:1000 | Loss: 1.7503
+  #5: Emb:12  Head:4 Lay:1 Ctx:16 FF:1 LR:0.0025 Steps:500  | Loss: 1.8553
+  #6: Emb:20  Head:2 Lay:2 Ctx:12 FF:3 LR:0.0120 Steps:750  | Loss: 2.0039
+  #7: Emb:12  Head:1 Lay:1 Ctx:24 FF:1 LR:0.0017 Steps:500  | Loss: 2.1141
+  #8: Emb:16  Head:1 Lay:3 Ctx:8  FF:2 LR:0.0445 Steps:1500 | Loss: 2.4849
+  Best: 1.4165 | Worst: 2.4849 | Spread: 1.0684 | Diversity: 8/8 (100%) | 111s
+
+--- Generation 3/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:24  Head:2 Lay:1 Ctx:16 FF:1 LR:0.0038 Steps:500  | Loss: 1.5550
+  #3: Emb:20  Head:4 Lay:2 Ctx:16 FF:1 LR:0.0038 Steps:500  | Loss: 1.5791
+  #4: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.5958
+  #5: Emb:12  Head:4 Lay:2 Ctx:16 FF:4 LR:0.0038 Steps:500  | Loss: 1.6492
+  #6: Emb:16  Head:2 Lay:3 Ctx:16 FF:3 LR:0.0353 Steps:500  | Loss: 1.7034
+  #7: Emb:16  Head:2 Lay:1 Ctx:24 FF:3 LR:0.0030 Steps:1500 | Loss: 2.0260
+  #8: Emb:20  Head:1 Lay:2 Ctx:16 FF:1 LR:0.0319 Steps:1100 | Loss: 2.3536
+  Best: 1.4165 | Worst: 2.3536 | Spread: 0.9372 | Diversity: 7/8 (88%) | 76s
+
+--- Generation 4/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:24  Head:2 Lay:1 Ctx:16 FF:1 LR:0.0038 Steps:500  | Loss: 1.4925
+  #3: Emb:24  Head:2 Lay:1 Ctx:16 FF:1 LR:0.0036 Steps:500  | Loss: 1.5733
+  #4: Emb:24  Head:1 Lay:4 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.6321
+  #5: Emb:16  Head:2 Lay:3 Ctx:16 FF:3 LR:0.0353 Steps:1000 | Loss: 1.8343
+  #6: Emb:20  Head:4 Lay:1 Ctx:16 FF:4 LR:0.0033 Steps:1500 | Loss: 1.9033
+  #7: Emb:12  Head:1 Lay:2 Ctx:24 FF:1 LR:0.0015 Steps:1000 | Loss: 1.9997
+  #8: Emb:32  Head:4 Lay:2 Ctx:12 FF:1 LR:0.0297 Steps:250  | Loss: 2.7549
+  Best: 1.4165 | Worst: 2.7549 | Spread: 1.3385 | Diversity: 7/8 (88%) | 143s
+
+--- Generation 5/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:24  Head:2 Lay:1 Ctx:16 FF:2 LR:0.0038 Steps:500  | Loss: 1.6613
+  #3: Emb:8   Head:1 Lay:4 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.6782
+  #4: Emb:24  Head:2 Lay:3 Ctx:16 FF:1 LR:0.0036 Steps:1000 | Loss: 1.7278
+  #5: Emb:12  Head:1 Lay:3 Ctx:24 FF:3 LR:0.0183 Steps:200  | Loss: 1.7673
+  #6: Emb:24  Head:1 Lay:3 Ctx:12 FF:1 LR:0.0389 Steps:500  | Loss: 1.9117
+  #7: Emb:8   Head:2 Lay:1 Ctx:16 FF:4 LR:0.0025 Steps:1500 | Loss: 2.0769
+  #8: Emb:24  Head:2 Lay:1 Ctx:8  FF:1 LR:0.0089 Steps:100  | Loss: 2.4456
+  Best: 1.4165 | Worst: 2.4456 | Spread: 1.0291 | Diversity: 8/8 (100%) | 147s
+
+--- Generation 6/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:8   Head:2 Lay:4 Ctx:12 FF:1 LR:0.0248 Steps:500  | Loss: 1.5470
+  #3: Emb:24  Head:1 Lay:4 Ctx:24 FF:2 LR:0.0038 Steps:500  | Loss: 1.5632
+  #4: Emb:20  Head:4 Lay:3 Ctx:8  FF:1 LR:0.0066 Steps:200  | Loss: 1.6518
+  #5: Emb:24  Head:4 Lay:2 Ctx:12 FF:4 LR:0.0154 Steps:500  | Loss: 1.6835
+  #6: Emb:12  Head:1 Lay:2 Ctx:24 FF:3 LR:0.0153 Steps:200  | Loss: 1.7230
+  #7: Emb:20  Head:2 Lay:1 Ctx:8  FF:3 LR:0.0092 Steps:750  | Loss: 1.8765
+  #8: Emb:12  Head:2 Lay:4 Ctx:12 FF:1 LR:0.0097 Steps:100  | Loss: 2.5061
+  Best: 1.4165 | Worst: 2.5061 | Spread: 1.0896 | Diversity: 8/8 (100%) | 138s
+
+--- Generation 7/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:8   Head:1 Lay:4 Ctx:12 FF:2 LR:0.0248 Steps:500  | Loss: 1.5259
+  #3: Emb:12  Head:2 Lay:1 Ctx:12 FF:1 LR:0.0115 Steps:500  | Loss: 1.5679
+  #4: Emb:24  Head:2 Lay:1 Ctx:12 FF:1 LR:0.0030 Steps:500  | Loss: 1.6079
+  #5: Emb:8   Head:1 Lay:1 Ctx:12 FF:4 LR:0.0199 Steps:1000 | Loss: 1.7107
+  #6: Emb:20  Head:4 Lay:1 Ctx:16 FF:1 LR:0.0066 Steps:450  | Loss: 2.0369
+  #7: Emb:8   Head:2 Lay:1 Ctx:12 FF:1 LR:0.0248 Steps:1100 | Loss: 2.0721
+  #8: Emb:16  Head:2 Lay:3 Ctx:24 FF:4 LR:0.0160 Steps:750  | Loss: 2.0778
+  Best: 1.4165 | Worst: 2.0778 | Spread: 0.6613 | Diversity: 8/8 (100%) | 78s
+
+--- Generation 8/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:24  Head:2 Lay:1 Ctx:12 FF:4 LR:0.0115 Steps:500  | Loss: 1.5459
+  #3: Emb:12  Head:2 Lay:3 Ctx:8  FF:1 LR:0.0032 Steps:1000 | Loss: 1.8118
+  #4: Emb:32  Head:1 Lay:4 Ctx:12 FF:2 LR:0.0248 Steps:500  | Loss: 1.9171
+  #5: Emb:24  Head:2 Lay:1 Ctx:12 FF:2 LR:0.0312 Steps:500  | Loss: 1.9404
+  #6: Emb:32  Head:2 Lay:2 Ctx:24 FF:1 LR:0.0390 Steps:500  | Loss: 1.9522
+  #7: Emb:24  Head:4 Lay:1 Ctx:8  FF:1 LR:0.0012 Steps:500  | Loss: 1.9788
+  #8: Emb:24  Head:4 Lay:1 Ctx:12 FF:2 LR:0.0038 Steps:400  | Loss: 2.0860
+  Best: 1.4165 | Worst: 2.0860 | Spread: 0.6696 | Diversity: 8/8 (100%) | 250s
+
+--- Generation 9/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:20  Head:2 Lay:2 Ctx:12 FF:4 LR:0.0115 Steps:500  | Loss: 1.5275
+  #3: Emb:24  Head:4 Lay:1 Ctx:12 FF:2 LR:0.0097 Steps:500  | Loss: 1.5408
+  #4: Emb:12  Head:4 Lay:1 Ctx:12 FF:2 LR:0.0072 Steps:500  | Loss: 1.6124
+  #5: Emb:32  Head:2 Lay:2 Ctx:8  FF:3 LR:0.0010 Steps:500  | Loss: 1.7466
+  #6: Emb:8   Head:1 Lay:3 Ctx:12 FF:4 LR:0.0491 Steps:200  | Loss: 1.9039
+  #7: Emb:24  Head:4 Lay:1 Ctx:8  FF:1 LR:0.0012 Steps:500  | Loss: 1.9688
+  #8: Emb:12  Head:2 Lay:3 Ctx:8  FF:1 LR:0.0060 Steps:650  | Loss: 2.1578
+  Best: 1.4165 | Worst: 2.1578 | Spread: 0.7414 | Diversity: 8/8 (100%) | 139s
+
+--- Generation 10/10 ---
+> #1: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4165
+  #2: Emb:24  Head:1 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500  | Loss: 1.4988
+  #3: Emb:12  Head:2 Lay:2 Ctx:12 FF:3 LR:0.0115 Steps:500  | Loss: 1.5352
+  #4: Emb:24  Head:4 Lay:1 Ctx:8  FF:3 LR:0.0097 Steps:500  | Loss: 1.5910
+  #5: Emb:24  Head:2 Lay:3 Ctx:12 FF:2 LR:0.0172 Steps:200  | Loss: 1.6151
+  #6: Emb:24  Head:4 Lay:3 Ctx:12 FF:2 LR:0.0097 Steps:500  | Loss: 1.7081
+  #7: Emb:20  Head:1 Lay:2 Ctx:12 FF:1 LR:0.0115 Steps:200  | Loss: 1.7886
+  #8: Emb:8   Head:4 Lay:2 Ctx:24 FF:1 LR:0.0027 Steps:300  | Loss: 2.5067
+  Best: 1.4165 | Worst: 2.5067 | Spread: 1.0902 | Diversity: 8/8 (100%) | 97s
+
+========================================
+       EVOLUTION COMPLETE
+========================================
+  Generations: 10
+  Total evaluations: 80
+  Total time: 1562s (156s/gen avg)
+  Best loss: 1.4165
+  Best config: Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500 
+  Target 1.2 NOT reached
+
+--- Evolution Trajectory ---
+   Gen      Best  Diversity
+     1    1.5676       100%  #############################
+     2    1.4165       100%  ###############################
+     3    1.4165        88%  ###############################
+     4    1.4165        88%  ###############################
+     5    1.4165       100%  ###############################
+     6    1.4165       100%  ###############################
+     7    1.4165       100%  ###############################
+     8    1.4165       100%  ###############################
+     9    1.4165       100%  ###############################
+    10    1.4165       100%  ###############################
+
+--- Top Configs Across All Generations ---
+   1. Gen 2 | Loss 1.4165 | Emb:24  Head:4 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500 
+   2. Gen 4 | Loss 1.4925 | Emb:24  Head:2 Lay:1 Ctx:16 FF:1 LR:0.0038 Steps:500 
+   3. Gen 10 | Loss 1.4988 | Emb:24  Head:1 Lay:1 Ctx:12 FF:1 LR:0.0097 Steps:500 
+   4. Gen 7 | Loss 1.5259 | Emb:8   Head:1 Lay:4 Ctx:12 FF:2 LR:0.0248 Steps:500 
+   5. Gen 9 | Loss 1.5275 | Emb:20  Head:2 Lay:2 Ctx:12 FF:4 LR:0.0115 Steps:500 
+   6. Gen 10 | Loss 1.5352 | Emb:12  Head:2 Lay:2 Ctx:12 FF:3 LR:0.0115 Steps:500 
+   7. Gen 9 | Loss 1.5408 | Emb:24  Head:4 Lay:1 Ctx:12 FF:2 LR:0.0097 Steps:500 
+   8. Gen 8 | Loss 1.5459 | Emb:24  Head:2 Lay:1 Ctx:12 FF:4 LR:0.0115 Steps:500 
+   9. Gen 6 | Loss 1.5470 | Emb:8   Head:2 Lay:4 Ctx:12 FF:1 LR:0.0248 Steps:500 
+  10. Gen 6 | Loss 1.5632 | Emb:24  Head:1 Lay:4 Ctx:24 FF:2 LR:0.0038 Steps:500 
+
+--- Hyperparameter Analysis ---
+  Param            Top 10  Bottom 10      Delta
+  Embedding          24.0       15.2      +8.8 ^
+  Heads               3.8        2.3      +1.5 ^
+  Layers              1.0        2.2      -1.2 v
+  Context            12.4       12.8      -0.4 v
+  FF Mult             1.0        1.3      -0.3 v
+  Learn Rate       0.0091     0.0167   -0.0076  
+  Steps             500.0      700.0    -200.0 v
+
+--- Insights ---
+  - Embedding size: larger is better (top avg 24 vs bottom 15)
+  - Training duration: fewer steps preferred (top avg 500 vs bottom 700)
+  - Learning rate: lower is better (top avg 0.0091 vs bottom 0.0167)
+
+--- Final Demo with Best Config ---
+Final loss: 1.5433
+
+Experiment saved to: experiments/evolve_20260227_015504.log

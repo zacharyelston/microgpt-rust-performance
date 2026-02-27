@@ -1,0 +1,18 @@
+=== MicroGPT Loss Evolution Engine ===
+Experiment: experiments/evolve_20260227_022211.log
+Target: loss < 1.2
+Population: 8, Generations: 10
+Selection: tournament(k=3), 2 random immigrants/gen
+
+--- Generation 1/10 ---
+> #1: Emb:16  Head:1 Lay:3 Ctx:12 FF:2 LR:0.0298 Steps:1000 | Loss: 1.6470
+  #2: Emb:24  Head:4 Lay:2 Ctx:12 FF:4 LR:0.0088 Steps:1000 | Loss: 1.6784
+  #3: Emb:8   Head:2 Lay:2 Ctx:8  FF:3 LR:0.0252 Steps:500  | Loss: 1.7330
+  #4: Emb:32  Head:4 Lay:2 Ctx:24 FF:2 LR:0.0010 Steps:500  | Loss: 1.7767
+  #5: Emb:12  Head:4 Lay:3 Ctx:24 FF:3 LR:0.0068 Steps:200  | Loss: 1.7790
+  #6: Emb:16  Head:2 Lay:3 Ctx:16 FF:3 LR:0.0484 Steps:500  | Loss: 1.7810
+  #7: Emb:32  Head:4 Lay:1 Ctx:16 FF:2 LR:0.0019 Steps:750  | Loss: 1.8839
+  #8: Emb:8   Head:4 Lay:3 Ctx:12 FF:3 LR:0.0014 Steps:1000 | Loss: 2.0335
+  Best: 1.6470 | Worst: 2.0335 | Spread: 0.3865 | Diversity: 8/8 (100%) | 208s
+
+--- Generation 2/10 ---

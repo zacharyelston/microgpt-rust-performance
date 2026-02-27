@@ -1,0 +1,107 @@
+=== MicroGPT Loss Evolution Engine ===
+Experiment: experiments/evolve_20260227_032723.log
+Target: loss < 1.2
+Population: 8, Generations: 10
+Selection: tournament(k=3), 2 random immigrants/gen
+
+--- Generation 1/10 ---
+> #1: Emb:32  Head:1 Lay:1 Ctx:24 FF:4 LR:0.0133 Steps:200  | Loss: 1.8036 [random]
+  #2: Emb:16  Head:1 Lay:1 Ctx:8  FF:3 LR:0.0016 Steps:500  | Loss: 1.8919 [random]
+  #3: Emb:20  Head:2 Lay:2 Ctx:12 FF:3 LR:0.0441 Steps:750  | Loss: 2.0314 [random]
+  #4: Emb:12  Head:2 Lay:1 Ctx:16 FF:3 LR:0.0301 Steps:1500 | Loss: 2.0675 [random]
+  #5: Emb:16  Head:1 Lay:1 Ctx:24 FF:3 LR:0.0128 Steps:300  | Loss: 2.1733 [random]
+  #6: Emb:16  Head:2 Lay:1 Ctx:16 FF:2 LR:0.0032 Steps:300  | Loss: 2.2120 [random]
+  #7: Emb:16  Head:4 Lay:1 Ctx:12 FF:2 LR:0.0040 Steps:300  | Loss: 2.2174 [random]
+  #8: Emb:16  Head:4 Lay:2 Ctx:8  FF:1 LR:0.0109 Steps:300  | Loss: 2.3977 [random]
+  Best: 1.8036 | Worst: 2.3977 | Spread: 0.5941 | Diversity: 8/8 (100%) | Stagnation: 0 | 76s
+
+--- Generation 2/10 ---
+> #1: Emb:32  Head:4 Lay:1 Ctx:24 FF:1 LR:0.0133 Steps:200  | Loss: 1.5717 [mutant]
+  #2: Emb:32  Head:2 Lay:3 Ctx:16 FF:3 LR:0.0023 Steps:200  | Loss: 1.6793 [cross]
+  #3: Emb:32  Head:1 Lay:1 Ctx:24 FF:4 LR:0.0133 Steps:200  | Loss: 1.8036 [elite]
+  #4: Emb:16  Head:2 Lay:3 Ctx:16 FF:1 LR:0.0012 Steps:1000 | Loss: 1.8306 [immigrant]
+  #5: Emb:16  Head:1 Lay:1 Ctx:16 FF:1 LR:0.0032 Steps:200  | Loss: 1.9300 [cross]
+  #6: Emb:20  Head:2 Lay:2 Ctx:12 FF:3 LR:0.0441 Steps:1000 | Loss: 1.9713 [hyper]
+  #7: Emb:8   Head:1 Lay:3 Ctx:8  FF:2 LR:0.0011 Steps:1000 | Loss: 2.1931 [immigrant]
+  #8: Emb:12  Head:2 Lay:2 Ctx:16 FF:3 LR:0.0301 Steps:1750 | Loss: 2.2186 [cross]
+  Best: 1.5717 | Worst: 2.2186 | Spread: 0.6469 | Diversity: 8/8 (100%) | Stagnation: 0 | 118s
+
+--- Generation 3/10 ---
+> #1: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0055 Steps:500  | Loss: 1.5417 [immigrant]
+  #2: Emb:32  Head:4 Lay:1 Ctx:24 FF:1 LR:0.0133 Steps:200  | Loss: 1.5717 [elite]
+  #3: Emb:16  Head:2 Lay:1 Ctx:16 FF:1 LR:0.0216 Steps:500  | Loss: 1.5839 [mutant]
+  #4: Emb:32  Head:4 Lay:1 Ctx:24 FF:1 LR:0.0133 Steps:200  | Loss: 1.5967 [mutant]
+  #5: Emb:32  Head:2 Lay:1 Ctx:24 FF:1 LR:0.0133 Steps:500  | Loss: 1.6082 [cross]
+  #6: Emb:8   Head:4 Lay:1 Ctx:8  FF:1 LR:0.0078 Steps:200  | Loss: 1.7818 [hyper]
+  #7: Emb:12  Head:1 Lay:2 Ctx:16 FF:3 LR:0.0044 Steps:750  | Loss: 1.9876 [immigrant]
+  #8: Emb:32  Head:2 Lay:1 Ctx:24 FF:4 LR:0.0023 Steps:100  | Loss: 2.4910 [cross]
+  Best: 1.5417 | Worst: 2.4910 | Spread: 0.9494 | Diversity: 7/8 (88%) | Stagnation: 0 | 122s
+
+--- Generation 4/10 ---
+> #1: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0055 Steps:500  | Loss: 1.5417 [elite]
+  #2: Emb:16  Head:4 Lay:4 Ctx:16 FF:1 LR:0.0216 Steps:500  | Loss: 1.7038 [mutant]
+  #3: Emb:32  Head:4 Lay:1 Ctx:24 FF:1 LR:0.0133 Steps:200  | Loss: 1.7469 [mutant]
+  #4: Emb:12  Head:4 Lay:3 Ctx:24 FF:2 LR:0.0043 Steps:1000 | Loss: 1.7673 [immigrant]
+  #5: Emb:32  Head:4 Lay:4 Ctx:24 FF:1 LR:0.0133 Steps:200  | Loss: 1.8914 [mutant]
+  #6: Emb:8   Head:4 Lay:1 Ctx:16 FF:4 LR:0.0078 Steps:200  | Loss: 1.9483 [mutant]
+  #7: Emb:24  Head:4 Lay:3 Ctx:8  FF:4 LR:0.0191 Steps:200  | Loss: 1.9507 [immigrant]
+  #8: Emb:32  Head:4 Lay:1 Ctx:24 FF:1 LR:0.0219 Steps:100  | Loss: 2.4588 [hyper]
+  Best: 1.5417 | Worst: 2.4588 | Spread: 0.9171 | Diversity: 7/8 (88%) | Stagnation: 1 | 73s
+
+--- Generation 5/10 ---
+> #1: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0055 Steps:500  | Loss: 1.5417 [elite]
+  #2: Emb:32  Head:2 Lay:4 Ctx:24 FF:1 LR:0.0133 Steps:500  | Loss: 1.7336 [cross]
+  #3: Emb:24  Head:2 Lay:3 Ctx:16 FF:2 LR:0.0055 Steps:600  | Loss: 1.7551 [hyper]
+  #4: Emb:12  Head:4 Lay:4 Ctx:24 FF:2 LR:0.0043 Steps:1000 | Loss: 1.7941 [cross]
+  #5: Emb:20  Head:1 Lay:1 Ctx:24 FF:2 LR:0.0050 Steps:1500 | Loss: 1.8854 [immigrant]
+  #6: Emb:16  Head:4 Lay:4 Ctx:16 FF:1 LR:0.0216 Steps:750  | Loss: 1.9507 [mutant]
+  #7: Emb:16  Head:2 Lay:1 Ctx:12 FF:4 LR:0.0357 Steps:200  | Loss: 1.9903 [hyper]
+  #8: Emb:16  Head:2 Lay:1 Ctx:24 FF:1 LR:0.0020 Steps:750  | Loss: 2.0120 [immigrant]
+  Best: 1.5417 | Worst: 2.0120 | Spread: 0.4703 | Diversity: 8/8 (100%) | Stagnation: 2 | 172s
+
+--- Generation 6/10 ---
+> #1: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0055 Steps:500  | Loss: 1.5417 [elite]
+  #2: Emb:32  Head:4 Lay:3 Ctx:24 FF:1 LR:0.0055 Steps:500  | Loss: 1.6493 [mutant]
+  #3: Emb:24  Head:2 Lay:3 Ctx:16 FF:2 LR:0.0055 Steps:600  | Loss: 1.6650 [mutant]
+  #4: Emb:20  Head:2 Lay:3 Ctx:12 FF:2 LR:0.0038 Steps:200  | Loss: 1.6957 [immigrant]
+  #5: Emb:12  Head:4 Lay:3 Ctx:8  FF:2 LR:0.0227 Steps:1500 | Loss: 2.0209 [immigrant]
+  #6: Emb:16  Head:4 Lay:4 Ctx:16 FF:4 LR:0.0216 Steps:250  | Loss: 2.4915 [mutant]
+  #7: Emb:32  Head:2 Lay:4 Ctx:24 FF:1 LR:0.0133 Steps:400  | Loss: 2.5325 [mutant]
+  #8: Emb:32  Head:1 Lay:3 Ctx:24 FF:3 LR:0.0055 Steps:250  | Loss: 2.6163 [mutant]
+  Best: 1.5417 | Worst: 2.6163 | Spread: 1.0746 | Diversity: 8/8 (100%) | Stagnation: 3 | 172s
+
+  *** CATACLYSM: 3 gens stagnant — expanding search space ***
+--- Generation 7/10 ---
+> #1: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0055 Steps:500  | Loss: 1.6452 [re-eval]
+  #2: Emb:24  Head:1 Lay:5 Ctx:8  FF:4 LR:0.0119 Steps:500  | Loss: 1.7551 [cataclysm]
+  #3: Emb:24  Head:4 Lay:3 Ctx:32 FF:3 LR:0.0006 Steps:3000 | Loss: 1.7833 [cataclysm]
+  #4: Emb:16  Head:4 Lay:6 Ctx:24 FF:6 LR:0.0013 Steps:3000 | Loss: 1.8935 [cataclysm]
+  #5: Emb:24  Head:2 Lay:6 Ctx:32 FF:2 LR:0.0016 Steps:1500 | Loss: 1.9018 [cataclysm]
+  #6: Emb:8   Head:4 Lay:6 Ctx:24 FF:1 LR:0.0016 Steps:3000 | Loss: 1.9898 [cataclysm]
+  #7: Emb:16  Head:8 Lay:4 Ctx:24 FF:1 LR:0.0010 Steps:2000 | Loss: 2.5336 [cataclysm]
+  #8: Emb:24  Head:2 Lay:5 Ctx:12 FF:4 LR:0.0161 Steps:2000 | Loss: 2.6731 [cataclysm]
+  Best: 1.6452 | Worst: 2.6731 | Spread: 1.0279 | Diversity: 8/8 (100%) | Stagnation: 0 | 1247s
+
+--- Generation 8/10 ---
+> #1: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0029 Steps:500  | Loss: 1.5657 [mutant]
+  #2: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0055 Steps:500  | Loss: 1.6452 [elite]
+  #3: Emb:24  Head:2 Lay:2 Ctx:8  FF:2 LR:0.0022 Steps:1000 | Loss: 1.6926 [immigrant]
+  #4: Emb:24  Head:4 Lay:5 Ctx:8  FF:4 LR:0.0119 Steps:500  | Loss: 1.7232 [mutant]
+  #5: Emb:16  Head:2 Lay:2 Ctx:24 FF:4 LR:0.0094 Steps:1000 | Loss: 1.7341 [immigrant]
+  #6: Emb:24  Head:4 Lay:3 Ctx:32 FF:3 LR:0.0234 Steps:3000 | Loss: 1.8575 [mutant]
+  #7: Emb:32  Head:2 Lay:4 Ctx:12 FF:1 LR:0.0055 Steps:1500 | Loss: 2.0516 [cross]
+  #8: Emb:24  Head:4 Lay:3 Ctx:32 FF:3 LR:0.0006 Steps:2000 | Loss: 2.3804 [mutant]
+  Best: 1.5657 | Worst: 2.3804 | Spread: 0.8146 | Diversity: 6/8 (75%) | Stagnation: 0 | 785s
+
+--- Generation 9/10 ---
+> #1: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0029 Steps:500  | Loss: 1.5657 [elite]
+  #2: Emb:32  Head:2 Lay:3 Ctx:24 FF:4 LR:0.0055 Steps:500  | Loss: 1.5907 [mutant]
+  #3: Emb:32  Head:2 Lay:3 Ctx:24 FF:1 LR:0.0029 Steps:1000 | Loss: 1.6297 [mutant]
+  #4: Emb:32  Head:1 Lay:1 Ctx:12 FF:1 LR:0.0025 Steps:1000 | Loss: 1.6726 [immigrant]
+  #5: Emb:16  Head:2 Lay:2 Ctx:24 FF:4 LR:0.0094 Steps:1000 | Loss: 1.7313 [mutant]
+  #6: Emb:32  Head:4 Lay:5 Ctx:12 FF:3 LR:0.0119 Steps:500  | Loss: 1.8713 [mutant]
+  #7: Emb:8   Head:2 Lay:2 Ctx:8  FF:1 LR:0.0028 Steps:1000 | Loss: 1.9674 [immigrant]
+  #8: Emb:32  Head:2 Lay:4 Ctx:12 FF:1 LR:0.0055 Steps:1500 | Loss: 1.9848 [mutant]
+  Best: 1.5657 | Worst: 1.9848 | Spread: 0.4191 | Diversity: 7/8 (88%) | Stagnation: 1 | 643s
+
+--- Generation 10/10 ---
