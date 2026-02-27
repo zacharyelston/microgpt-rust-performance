@@ -39,7 +39,7 @@ const LOSER_MIN_SAMPLES: usize = 2; // Need this many bad samples to blacklist
 const INPUT_FILE: &str = "input.txt";
 
 #[derive(Clone, Debug)]
-struct Genome {
+struct LossCandidate {
     n_emb: usize,
     n_head: usize,
     n_layer: usize,
@@ -52,12 +52,12 @@ struct Genome {
     origin: String,
 }
 
-impl Genome {
+impl LossCandidate {
     fn new_random() -> Self {
         let mut rng = rand::thread_rng();
         let n_emb = *[8, 12, 16, 20, 24, 32].choose(&mut rng).unwrap();
         let n_head = *[1, 2, 4].choose(&mut rng).unwrap();
-        let mut g = Genome {
+        let mut g = LossCandidate {
             n_emb,
             n_head,
             n_layer: rng.gen_range(1..=3),
@@ -77,7 +77,7 @@ impl Genome {
         let mut rng = rand::thread_rng();
         let n_emb = *[8, 16, 24, 32, 48, 64].choose(&mut rng).unwrap();
         let n_head = *[1, 2, 4, 8].choose(&mut rng).unwrap();
-        let mut g = Genome {
+        let mut g = LossCandidate {
             n_emb,
             n_head,
             n_layer: rng.gen_range(1..=6),
@@ -277,9 +277,9 @@ impl Genome {
 
 // --- Genetic Operators ---
 
-fn crossover(a: &Genome, b: &Genome) -> Genome {
+fn recombine_candidates(a: &LossCandidate, b: &LossCandidate) -> LossCandidate {
     let mut rng = rand::thread_rng();
-    let mut child = Genome {
+    let mut child = LossCandidate {
         n_emb: if rng.gen() { a.n_emb } else { b.n_emb },
         n_head: if rng.gen() { a.n_head } else { b.n_head },
         n_layer: if rng.gen() { a.n_layer } else { b.n_layer },
@@ -295,8 +295,11 @@ fn crossover(a: &Genome, b: &Genome) -> Genome {
     child
 }
 
-fn tournament_select<'a>(pop: &'a [Genome], rng: &mut ThreadRng) -> &'a Genome {
-    let mut best: Option<&Genome> = None;
+fn select_tournament_winner<'a>(
+    pop: &'a [LossCandidate],
+    rng: &mut ThreadRng,
+) -> &'a LossCandidate {
+    let mut best: Option<&LossCandidate> = None;
     for _ in 0..TOURNAMENT_SIZE {
         let candidate = &pop[rng.gen_range(0..pop.len())];
         if best.is_none() || candidate.loss < best.unwrap().loss {
@@ -308,7 +311,7 @@ fn tournament_select<'a>(pop: &'a [Genome], rng: &mut ThreadRng) -> &'a Genome {
 
 // --- Species & Diversity Analysis ---
 
-fn species_census(pop: &[Genome]) -> HashMap<String, Vec<usize>> {
+fn build_species_census(pop: &[LossCandidate]) -> HashMap<String, Vec<usize>> {
     let mut species: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, g) in pop.iter().enumerate() {
         species.entry(g.species()).or_default().push(i);
@@ -320,23 +323,23 @@ fn species_census(pop: &[Genome]) -> HashMap<String, Vec<usize>> {
 // Tracks architectures that consistently produce bad results.
 // If we've seen a species fail multiple times, don't waste evals on it.
 
-struct Blacklist {
+struct SpeciesBlacklist {
     failures: HashMap<String, Vec<f64>>,
 }
 
-impl Blacklist {
+impl SpeciesBlacklist {
     fn new() -> Self {
-        Blacklist {
+        SpeciesBlacklist {
             failures: HashMap::new(),
         }
     }
 
-    fn record(&mut self, genome: &Genome) {
-        if genome.loss > LOSER_THRESHOLD && genome.loss < f64::MAX {
+    fn record(&mut self, candidate: &LossCandidate) {
+        if candidate.loss > LOSER_THRESHOLD && candidate.loss < f64::MAX {
             self.failures
-                .entry(genome.species())
+                .entry(candidate.species())
                 .or_default()
-                .push(genome.loss);
+                .push(candidate.loss);
         }
     }
 
@@ -357,24 +360,24 @@ impl Blacklist {
 
     // Generate a random organism that isn't from a blacklisted species.
     // Gives up after 20 tries and returns whatever it got.
-    fn random_avoiding(&self) -> Genome {
+    fn random_avoiding(&self) -> LossCandidate {
         for _ in 0..20 {
-            let g = Genome::new_random();
+            let g = LossCandidate::new_random();
             if !self.is_blacklisted(&g.species()) {
                 return g;
             }
         }
-        Genome::new_random()
+        LossCandidate::new_random()
     }
 
-    fn random_wide_avoiding(&self) -> Genome {
+    fn random_wide_avoiding(&self) -> LossCandidate {
         for _ in 0..20 {
-            let g = Genome::new_random_wide();
+            let g = LossCandidate::new_random_wide();
             if !self.is_blacklisted(&g.species()) {
                 return g;
             }
         }
-        Genome::new_random_wide()
+        LossCandidate::new_random_wide()
     }
 }
 
@@ -383,7 +386,7 @@ impl Blacklist {
 #[derive(Clone, Debug)]
 struct HistoryEntry {
     gen: usize,
-    genome: Genome,
+    candidate: LossCandidate,
 }
 
 macro_rules! log {
@@ -464,8 +467,10 @@ fn main() {
     }
     load_training_data(INPUT_FILE);
 
-    let mut population: Vec<Genome> = (0..POPULATION_SIZE).map(|_| Genome::new_random()).collect();
-    let mut best_ever = Genome::new_random();
+    let mut population: Vec<LossCandidate> = (0..POPULATION_SIZE)
+        .map(|_| LossCandidate::new_random())
+        .collect();
+    let mut best_ever = LossCandidate::new_random();
     best_ever.loss = f64::MAX;
     let mut history: Vec<HistoryEntry> = Vec::new();
     let mut gen_bests: Vec<(usize, f64, f64)> = Vec::new();
@@ -473,7 +478,7 @@ fn main() {
     let mut target_gen: Option<usize> = None;
     let mut stagnation_count: usize = 0;
     let mut prev_best_loss: f64 = f64::MAX;
-    let mut blacklist = Blacklist::new();
+    let mut species_blacklist = SpeciesBlacklist::new();
 
     for gen in 0..NUM_GENERATIONS {
         let gen_start = Instant::now();
@@ -492,19 +497,19 @@ fn main() {
         population
             .par_iter_mut()
             .enumerate()
-            .for_each(|(i, genome)| {
-                genome.evaluate(i + 1, run_seed);
+            .for_each(|(i, candidate)| {
+                candidate.evaluate(i + 1, run_seed);
             });
 
         population.sort_by(|a, b| a.loss.partial_cmp(&b.loss).unwrap());
 
         // Record losers in the blacklist
         for g in &population {
-            blacklist.record(g);
+            species_blacklist.record(g);
         }
 
         // Species census: count architecture families
-        let census = species_census(&population);
+        let census = build_species_census(&population);
         let num_species = census.len();
         let largest_species = census.values().map(|v| v.len()).max().unwrap_or(0);
         let monoculture = largest_species as f64 / POPULATION_SIZE as f64;
@@ -522,7 +527,7 @@ fn main() {
             );
             history.push(HistoryEntry {
                 gen: gen + 1,
-                genome: g.clone(),
+                candidate: g.clone(),
             });
         }
 
@@ -555,7 +560,7 @@ fn main() {
         let elapsed = gen_start.elapsed().as_secs_f64();
         log!(log_file, "  Best: {:.4} | Worst: {:.4} | Spread: {:.4} | Species: {} ({:.0}% largest) | Stagnation: {} | Blacklisted: {} | {:.0}s\n",
             gen_best.loss, gen_worst.loss, spread, num_species, monoculture * 100.0,
-            stagnation_count, blacklist.len(), elapsed);
+            stagnation_count, species_blacklist.len(), elapsed);
 
         // --- Breed the next generation ---
         if gen < NUM_GENERATIONS - 1 {
@@ -569,7 +574,7 @@ fn main() {
                 );
                 eprintln!("[gen {}] CATACLYSM triggered", gen + 1);
 
-                let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
+                let mut new_pop: Vec<LossCandidate> = Vec::with_capacity(POPULATION_SIZE);
 
                 let mut elite = population[0].clone();
                 elite.origin = "re-eval".to_string();
@@ -578,12 +583,12 @@ fn main() {
                 new_pop.push(elite);
 
                 while new_pop.len() < POPULATION_SIZE {
-                    let mut g = blacklist.random_wide_avoiding();
+                    let mut g = species_blacklist.random_wide_avoiding();
                     g.origin = "cataclysm".to_string();
                     new_pop.push(g);
                 }
                 eprintln!("[breed] cataclysm: 1 re-eval + {} wide randoms (avoiding {} blacklisted species)",
-                    POPULATION_SIZE - 1, blacklist.len());
+                    POPULATION_SIZE - 1, species_blacklist.len());
 
                 stagnation_count = 0;
                 population = new_pop;
@@ -600,7 +605,7 @@ fn main() {
                 );
                 eprintln!("[gen {}] CHAMPIONSHIP breeding triggered", gen + 1);
 
-                let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
+                let mut new_pop: Vec<LossCandidate> = Vec::with_capacity(POPULATION_SIZE);
 
                 // Re-evaluate the elite (remove frozen advantage)
                 let mut elite = population[0].clone();
@@ -618,13 +623,13 @@ fn main() {
                 eprintln!("[breed] growth mutation: {}", grown.desc());
 
                 // Mate the top 3 winners together (championship crossover)
-                let top3: Vec<&Genome> = population.iter().take(3).collect();
+                let top3: Vec<&LossCandidate> = population.iter().take(3).collect();
                 for i in 0..top3.len() {
                     if new_pop.len() >= POPULATION_SIZE {
                         break;
                     }
                     let j = (i + 1) % top3.len();
-                    let mut child = crossover(top3[i], top3[j]);
+                    let mut child = recombine_candidates(top3[i], top3[j]);
                     child.fine_tune();
                     child.origin = "champion".to_string();
                     new_pop.push(child);
@@ -641,7 +646,7 @@ fn main() {
 
                 // One immigrant to maintain some diversity
                 if new_pop.len() < POPULATION_SIZE {
-                    let mut immigrant = blacklist.random_avoiding();
+                    let mut immigrant = species_blacklist.random_avoiding();
                     immigrant.origin = "immigrant".to_string();
                     new_pop.push(immigrant);
                 }
@@ -652,7 +657,7 @@ fn main() {
             } else {
                 // === NORMAL BREEDING ===
                 eprintln!("[gen {}] breeding next generation...", gen + 1);
-                let mut new_pop: Vec<Genome> = Vec::with_capacity(POPULATION_SIZE);
+                let mut new_pop: Vec<LossCandidate> = Vec::with_capacity(POPULATION_SIZE);
 
                 let mut elite = population[0].clone();
                 elite.origin = "elite".to_string();
@@ -663,7 +668,7 @@ fn main() {
 
                 for i in 0..NUM_IMMIGRANTS {
                     if new_pop.len() < POPULATION_SIZE {
-                        let mut immigrant = blacklist.random_avoiding();
+                        let mut immigrant = species_blacklist.random_avoiding();
                         immigrant.origin = "immigrant".to_string();
                         eprintln!("[breed] immigrant {}: {}", i + 1, immigrant.desc());
                         new_pop.push(immigrant);
@@ -677,22 +682,22 @@ fn main() {
                 while new_pop.len() < POPULATION_SIZE {
                     let strategy: f64 = rng.gen();
                     if strategy < 0.4 {
-                        let p1 = tournament_select(&population, &mut rng);
-                        let p2 = tournament_select(&population, &mut rng);
-                        let mut child = crossover(p1, p2);
+                        let p1 = select_tournament_winner(&population, &mut rng);
+                        let p2 = select_tournament_winner(&population, &mut rng);
+                        let mut child = recombine_candidates(p1, p2);
                         child.mutate();
                         child.origin = "cross".to_string();
                         new_pop.push(child);
                         crossover_count += 1;
                     } else if strategy < 0.8 {
-                        let parent = tournament_select(&population, &mut rng);
+                        let parent = select_tournament_winner(&population, &mut rng);
                         let mut child = parent.clone();
                         child.mutate();
                         child.origin = "mutant".to_string();
                         new_pop.push(child);
                         mutant_count += 1;
                     } else {
-                        let parent = tournament_select(&population, &mut rng);
+                        let parent = select_tournament_winner(&population, &mut rng);
                         let mut child = parent.clone();
                         child.mutate();
                         child.mutate();
@@ -728,7 +733,11 @@ fn main() {
     );
     log!(log_file, "  Best loss: {:.4}", best_ever.loss);
     log!(log_file, "  Best config: {}", best_ever.desc());
-    log!(log_file, "  Blacklisted species: {}", blacklist.len());
+    log!(
+        log_file,
+        "  Blacklisted species: {}",
+        species_blacklist.len()
+    );
     if let Some(g) = target_gen {
         log!(
             log_file,
@@ -757,12 +766,12 @@ fn main() {
 
     log!(log_file, "\n--- Top Configs Across All Generations ---");
     let mut sorted_history = history.clone();
-    sorted_history.sort_by(|a, b| a.genome.loss.partial_cmp(&b.genome.loss).unwrap());
+    sorted_history.sort_by(|a, b| a.candidate.loss.partial_cmp(&b.candidate.loss).unwrap());
 
     let mut seen_sigs: HashSet<String> = HashSet::new();
     let mut unique_top: Vec<&HistoryEntry> = Vec::new();
     for entry in &sorted_history {
-        if seen_sigs.insert(entry.genome.species()) {
+        if seen_sigs.insert(entry.candidate.species()) {
             unique_top.push(entry);
             if unique_top.len() >= 10 {
                 break;
@@ -776,29 +785,29 @@ fn main() {
             "  {:2}. Gen {} | Loss {:.4} | {} [{}]",
             i + 1,
             entry.gen,
-            entry.genome.loss,
-            entry.genome.desc(),
-            entry.genome.origin
+            entry.candidate.loss,
+            entry.candidate.desc(),
+            entry.candidate.origin
         );
     }
 
     log!(log_file, "\n--- Hyperparameter Analysis ---");
 
     let top_n = std::cmp::min(10, sorted_history.len());
-    let top_configs: Vec<&Genome> = sorted_history
+    let top_configs: Vec<&LossCandidate> = sorted_history
         .iter()
         .take(top_n)
-        .map(|e| &e.genome)
+        .map(|e| &e.candidate)
         .collect();
-    let bot_configs: Vec<&Genome> = sorted_history
+    let bot_configs: Vec<&LossCandidate> = sorted_history
         .iter()
         .rev()
         .take(top_n)
-        .map(|e| &e.genome)
+        .map(|e| &e.candidate)
         .collect();
 
-    fn avg_f(genomes: &[&Genome], f: fn(&Genome) -> f64) -> f64 {
-        genomes.iter().map(|g| f(g)).sum::<f64>() / genomes.len() as f64
+    fn avg_f(candidates: &[&LossCandidate], f: fn(&LossCandidate) -> f64) -> f64 {
+        candidates.iter().map(|g| f(g)).sum::<f64>() / candidates.len() as f64
     }
 
     log!(
@@ -810,14 +819,14 @@ fn main() {
         "Delta"
     );
 
-    let params: Vec<(&str, fn(&Genome) -> f64)> = vec![
-        ("Embedding", |g: &Genome| g.n_emb as f64),
-        ("Heads", |g: &Genome| g.n_head as f64),
-        ("Layers", |g: &Genome| g.n_layer as f64),
-        ("Context", |g: &Genome| g.n_ctx as f64),
-        ("FF Mult", |g: &Genome| g.n_ff_exp as f64),
-        ("Learn Rate", |g: &Genome| g.lr),
-        ("Steps", |g: &Genome| g.steps as f64),
+    let params: Vec<(&str, fn(&LossCandidate) -> f64)> = vec![
+        ("Embedding", |g: &LossCandidate| g.n_emb as f64),
+        ("Heads", |g: &LossCandidate| g.n_head as f64),
+        ("Layers", |g: &LossCandidate| g.n_layer as f64),
+        ("Context", |g: &LossCandidate| g.n_ctx as f64),
+        ("FF Mult", |g: &LossCandidate| g.n_ff_exp as f64),
+        ("Learn Rate", |g: &LossCandidate| g.lr),
+        ("Steps", |g: &LossCandidate| g.steps as f64),
     ];
 
     for (name, f) in &params {
@@ -930,7 +939,7 @@ fn main() {
     }
 
     // --- Blacklist report ---
-    if blacklist.len() > 0 {
+    if species_blacklist.len() > 0 {
         log!(
             log_file,
             "\n--- Blacklisted Species (loss > {:.1}, {}+ failures) ---",
@@ -959,7 +968,7 @@ fn main() {
     let best_config = best_ever.to_config(10);
     let best_gen = sorted_history
         .iter()
-        .find(|e| e.genome.loss == best_ever.loss)
+        .find(|e| e.candidate.loss == best_ever.loss)
         .map(|e| e.gen)
         .unwrap_or(0);
 
