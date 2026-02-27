@@ -2,7 +2,7 @@
 
 ## Overview
 
-A minimalist Rust implementation of a Transformer (GPT), porting Karpathy's microGPT with automatic differentiation from scratch. Includes a parallel evolutionary engine that evolves hyperparameters for aesthetic name generation.
+A minimalist Rust implementation of a Transformer (GPT), porting Karpathy's microGPT with automatic differentiation from scratch. Includes parallel evolutionary engines that evolve hyperparameters for aesthetic name generation and loss minimization.
 
 ## Project Structure
 
@@ -11,7 +11,8 @@ A minimalist Rust implementation of a Transformer (GPT), porting Karpathy's micr
 │   ├── lib.rs            # Shared library: Val autograd, GPT model, training logic
 │   ├── main.rs           # Main binary: CLI training + generation
 │   └── bin/
-│       └── evolve.rs     # Evolutionary engine binary (parallel via rayon)
+│       ├── evolve.rs     # Aesthetic evolution binary (parallel via rayon)
+│       └── evolve_loss.rs # Loss-targeting evolution binary (target < 1.9)
 ├── Cargo.toml            # Rust dependencies (rand, rayon)
 ├── input.txt             # Training dataset (names from makemore)
 ├── analyze_*.py          # Python analysis scripts for scaling experiments
@@ -23,8 +24,9 @@ A minimalist Rust implementation of a Transformer (GPT), porting Karpathy's micr
 ## Running
 
 ```bash
-cargo run --release                  # Main training + generation
-cargo run --release --bin evolve     # Evolutionary hyperparameter search
+cargo run --release                       # Main training + generation
+cargo run --release --bin evolve          # Aesthetic evolutionary search
+cargo run --release --bin evolve_loss     # Loss-targeting evolution (< 1.9)
 ```
 
 ## Architecture
@@ -33,14 +35,17 @@ cargo run --release --bin evolve     # Evolutionary hyperparameter search
 - Operator overloading via `op!` macro (Add, Sub, Mul)
 - GPT struct: embeddings, multi-head attention, MLP, RMSNorm
 - `TrainingConfig` struct for parameterized training
-- `train_and_generate()` shared function used by both binaries
-- Evolutionary engine: population of Genomes with fitness scoring (flow, symmetry, creativity)
+- `TrainingResult` struct returns names, final_loss, num_params
+- `train_and_generate()` shared function used by all binaries
+- `load_training_data()` and `build_vocab()` shared data loading
+- Aesthetic evolution: fitness scoring (flow, symmetry, creativity)
+- Loss evolution: targets loss < 1.9 with crossover + mutation
 
 ## Dependencies
 
 - `rand = "0.8"` — random number generation
-- `rayon = "1.10"` — parallel iteration for evolutionary engine
+- `rayon = "1.10"` — parallel iteration for evolutionary engines
 
 ## Workflow
 
-- **Start application**: `cargo run --release` (console output, runs main binary)
+- **Start application**: `cargo run --release --bin evolve_loss` (console output)
