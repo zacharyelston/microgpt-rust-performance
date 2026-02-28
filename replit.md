@@ -18,8 +18,12 @@ A minimalist Rust implementation of a self-evolving Transformer (GPT), porting K
 │   ├── lib.rs            # Shared library: Val autograd, GPT model, genome save/load
 │   ├── main.rs           # Main binary: runs as evolved or primordial creature
 │   └── bin/
+│       ├── ab_test.rs     # A/B comparison: words vs noise vs names
 │       ├── evolve.rs     # Aesthetic evolution binary (parallel via rayon)
 │       └── evolve_loss.rs # Loss evolution engine v2 (species-aware)
+├── data/
+│   ├── words.txt          # 7,622 common English words (2-8 chars)
+│   └── nonwords.txt       # 7,622 random letter strings (matched lengths)
 ├── genome.json            # The organism's evolved DNA (written by evolution)
 ├── experiments/           # Auto-generated experiment logs (timestamped)
 ├── research/             # Analysis reports from evolution experiments

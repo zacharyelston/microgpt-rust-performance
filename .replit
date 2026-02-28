@@ -24,4 +24,4 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cargo run --release --bin evolve_loss"
+args = "cargo run --release --bin ab_test"

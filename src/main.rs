@@ -51,6 +51,7 @@ fn main() {
             "-y" | "--layer" => { i += 1; if i < args.len() { cfg.n_layer = args[i].parse().unwrap_or(cfg.n_layer); } }
             "-c" | "--ctx" => { i += 1; if i < args.len() { cfg.n_ctx = args[i].parse().unwrap_or(cfg.n_ctx); } }
             "-f" | "--ff" => { i += 1; if i < args.len() { cfg.n_ff_exp = args[i].parse().unwrap_or(cfg.n_ff_exp); } }
+            "-d" | "--data" => { i += 1; if i < args.len() { cfg.input_file = args[i].clone(); } }
             "--silent" => { silent = true; }
             _ => {}
         }
