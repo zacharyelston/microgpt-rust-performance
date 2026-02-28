@@ -36,7 +36,7 @@ const STAGNATION_CHAMPIONSHIP: usize = 2; // Fine-tune the winner
 const STAGNATION_CATACLYSM: usize = 4;    // Blow up and start wider
 const LOSER_THRESHOLD: f64 = 2.3;         // Architectures with loss above this get blacklisted
 const LOSER_MIN_SAMPLES: usize = 2;       // Need this many bad samples to blacklist
-const COMPLEXITY_WEIGHT: f64 = 0.005;     // Penalty per log-unit of energy cost
+const COMPLEXITY_WEIGHT: f64 = 0.02;      // Penalty per log-unit of energy cost
 const INPUT_FILE: &str = "input.txt";
 
 #[derive(Clone, Debug)]
@@ -65,7 +65,7 @@ impl Genome {
             n_ctx: *[2, 3, 4, 5, 6, 7].choose(&mut rng).unwrap(),
             n_ff_exp: rng.gen_range(1..=7),
             lr: 10f64.powf(rng.gen_range(-3.0..-1.3)),
-            steps: *[200, 500, 1000, 1500, 2500, 4000].choose(&mut rng).unwrap(),
+            steps: *[200, 300, 500, 750, 1000, 1500].choose(&mut rng).unwrap(),
             loss: f64::MAX,
             evaluated: false,
             origin: "random".to_string(),
@@ -85,7 +85,7 @@ impl Genome {
             n_ctx: *[2, 3, 4, 5, 6, 7].choose(&mut rng).unwrap(),
             n_ff_exp: rng.gen_range(1..=7),
             lr: 10f64.powf(rng.gen_range(-4.0..-1.0)),
-            steps: *[500, 1000, 2000, 3000, 4000, 5000].choose(&mut rng).unwrap(),
+            steps: *[300, 500, 1000, 1500, 2000, 3000].choose(&mut rng).unwrap(),
             loss: f64::MAX,
             evaluated: false,
             origin: "cataclysm".to_string(),
@@ -105,7 +105,7 @@ impl Genome {
                 3 => self.lr = 10f64.powf(rng.gen_range(-3.0..-1.3)),
                 4 => {
                     let delta = *[-500, -250, -100, 100, 250, 500].choose(&mut rng).unwrap();
-                    self.steps = (self.steps as i32 + delta).clamp(100, 5000) as usize;
+                    self.steps = (self.steps as i32 + delta).clamp(100, 2000) as usize;
                 },
                 5 => self.n_ctx = *[2, 3, 4, 5, 6, 7].choose(&mut rng).unwrap(),
                 6 => self.n_ff_exp = rng.gen_range(1..=7),
@@ -130,14 +130,14 @@ impl Genome {
             1 => {
                 // Nudge steps by ±50-200
                 let delta = rng.gen_range(-200..=200);
-                self.steps = (self.steps as i32 + delta).clamp(100, 5000) as usize;
+                self.steps = (self.steps as i32 + delta).clamp(100, 3000) as usize;
             }
             2 => {
                 // Nudge both
                 let factor = rng.gen_range(0.8..1.2);
                 self.lr = (self.lr * factor).clamp(0.0001, 0.05);
                 let delta = rng.gen_range(-100..=100);
-                self.steps = (self.steps as i32 + delta).clamp(100, 5000) as usize;
+                self.steps = (self.steps as i32 + delta).clamp(100, 3000) as usize;
             }
             _ => {}
         }

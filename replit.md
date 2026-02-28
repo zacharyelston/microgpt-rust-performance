@@ -26,7 +26,8 @@ A minimalist Rust implementation of a self-evolving Transformer (GPT), porting K
 │   ├── embedding_size_analysis.md  # Scaling curve Emb:4-32
 │   ├── emb4_10gen_complexity_penalty.md  # Emb:4, 10 generations
 │   ├── emb4_20gen_long_run.md     # Emb:4, 20 generations deep study
-│   └── emb2_8_spectrum_sweep.md   # Emb:2-8 mixed competition
+│   ├── emb2_8_spectrum_sweep.md   # Emb:2-8 mixed competition
+│   └── step_ceiling_and_penalty_experiments.md  # Step cap & penalty tuning
 ├── Cargo.toml            # Rust dependencies (rand, rayon, chrono)
 ├── input.txt             # Training dataset (names from makemore)
 ├── README.md             # Project documentation
