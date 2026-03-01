@@ -35,6 +35,8 @@ struct Genome {
     n_emb: usize,
     n_head: usize,
     n_layer: usize,
+    n_ctx: usize,
+    n_ff_exp: usize,
     lr: f64,
     fitness: f64,
     names: Vec<String>,
@@ -44,10 +46,12 @@ impl Genome {
     fn new_random() -> Self {
         let mut rng = rand::thread_rng();
         let mut g = Genome {
-            n_emb: *[16, 24, 32].choose(&mut rng).unwrap(),
-            n_head: *[2, 4].choose(&mut rng).unwrap(),
-            n_layer: rng.gen_range(1..=3),
-            lr: rng.gen_range(0.001..0.015),
+            n_emb: rng.gen_range(1..=8),
+            n_head: rng.gen_range(1..=8),
+            n_layer: rng.gen_range(1..=8),
+            n_ctx: rng.gen_range(1..=8),
+            n_ff_exp: rng.gen_range(1..=8),
+            lr: rng.gen_range(0.001..0.02),
             fitness: 0.0,
             names: Vec::new(),
         };
@@ -57,12 +61,14 @@ impl Genome {
 
     fn mutate(&mut self) {
         let mut rng = rand::thread_rng();
-        let choice = rng.gen_range(0..4);
+        let choice = rng.gen_range(0..6);
         match choice {
-            0 => self.n_emb = *[16, 24, 32, 40].choose(&mut rng).unwrap(),
-            1 => self.n_head = *[2, 4].choose(&mut rng).unwrap(),
-            2 => self.n_layer = (self.n_layer as i32 + *[-1, 1].choose(&mut rng).unwrap()).max(1).min(4) as usize,
-            3 => self.lr = (self.lr * rng.gen_range(0.7..1.3)).max(0.0001).min(0.1),
+            0 => self.n_emb = rng.gen_range(1..=8),
+            1 => self.n_head = rng.gen_range(1..=8),
+            2 => self.n_layer = rng.gen_range(1..=8),
+            3 => self.n_ctx = rng.gen_range(1..=8),
+            4 => self.n_ff_exp = rng.gen_range(1..=8),
+            5 => self.lr = (self.lr * rng.gen_range(0.7..1.3)).max(0.0001).min(0.1),
             _ => {},
         }
         self.enforce_constraints();
@@ -72,13 +78,22 @@ impl Genome {
 
     // Ensure embedding dimension is divisible by number of heads
     fn enforce_constraints(&mut self) {
-        if self.n_emb % self.n_head != 0 {
-            self.n_head = 2;
+        // Clamp all to 1-8
+        self.n_emb = self.n_emb.max(1).min(8);
+        self.n_layer = self.n_layer.max(1).min(8);
+        self.n_ctx = self.n_ctx.max(1).min(8);
+        self.n_ff_exp = self.n_ff_exp.max(1).min(8);
+        
+        // n_head must be <= n_emb
+        self.n_head = self.n_head.max(1).min(self.n_emb);
+
+        // Find largest divisor of n_emb <= current n_head
+        while self.n_emb % self.n_head != 0 {
+            self.n_head -= 1;
         }
-        if self.n_emb % self.n_head != 0 {
-             self.n_emb = (self.n_emb / self.n_head) * self.n_head;
-             if self.n_emb == 0 { self.n_emb = self.n_head; }
-        }
+
+        // Context must be at least 2 to have input->target pairs
+        self.n_ctx = self.n_ctx.max(2);
     }
 
     // Train and evaluate based on a specific objective
@@ -91,6 +106,8 @@ impl Genome {
             n_emb: self.n_emb,
             n_head: self.n_head,
             n_layer: self.n_layer,
+            n_ctx: self.n_ctx,
+            n_ff_exp: self.n_ff_exp,
             lr: self.lr,
             steps: TRAIN_STEPS,
             input_file: INPUT_FILE.to_string(),
@@ -145,8 +162,16 @@ impl HydraHead {
         // Sort by fitness
         self.population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
 
-        println!("  [{}] Top Score: {:.4} (Genome: Emb:{} L:{})", 
-            self.name, self.population[0].fitness, self.population[0].n_emb, self.population[0].n_layer);
+        println!("  [{}] Top Score: {:.4} (Genome: Emb:{} Head:{} Lay:{} Ctx:{} FF:{} LR:{:.5})", 
+            self.name, 
+            self.population[0].fitness, 
+            self.population[0].n_emb, 
+            self.population[0].n_head, 
+            self.population[0].n_layer,
+            self.population[0].n_ctx,
+            self.population[0].n_ff_exp,
+            self.population[0].lr
+        );
     }
 
     fn breed(&mut self) {
@@ -358,7 +383,8 @@ fn main() {
     for head in &heads {
         let best = &head.population[0];
         println!("\n[{}] Champion:", head.name);
-        println!("  Genome: Emb:{} Head:{} Lay:{} LR:{:.5}", best.n_emb, best.n_head, best.n_layer, best.lr);
+        println!("  Genome: Emb:{} Head:{} Lay:{} Ctx:{} FF:{} LR:{:.5}", 
+            best.n_emb, best.n_head, best.n_layer, best.n_ctx, best.n_ff_exp, best.lr);
         println!("  Score:  {:.4}", best.fitness);
         println!("  Names:  {}", best.names.iter().take(5).cloned().collect::<Vec<_>>().join(", "));
     }
