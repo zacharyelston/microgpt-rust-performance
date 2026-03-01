@@ -1,25 +1,15 @@
-# MicroGPT: A Living Transformer
+# MicroGPT: A Living Transformer (Hydra Release)
 
 > A minimal GPT that evolves itself.
 
 ```
-Last Evolution (v2) — 10 generations, 80 evaluations, 1820s
+Hydra Evolution (v3) — 3 Heads, 5 Cycles, Parallel Execution
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Gen 1   1.5278  ████████████████████░░░░  8 species  [random]
-  Gen 2   1.5278  ████████████████████░░░░  8 species  [elite]
-  Gen 3   1.5278  ████████████████████░░░░  8 species  ← stagnation
-      *** CHAMPIONSHIP: breeding winners with growth ***
-  Gen 4   1.5886  ███████████████████░░░░░  6 species  [re-eval] [grown] [champion]
-  Gen 5   1.5232  ████████████████████░░░░  7 species  [immigrant] broke through
-  Gen 6   1.5232  ████████████████████░░░░  7 species
-  Gen 7   1.5232  ████████████████████░░░░  7 species  ← stagnation
-      *** CHAMPIONSHIP: breeding winners with growth ***
-  Gen 8   1.4960  █████████████████████░░░  6 species  [grown] emerged
-  Gen 9   1.4960  █████████████████████░░░  7 species
-  Gen 10  1.4676  █████████████████████░░░  8 species  [cross] new best
+  [Weaver] Champion: Emb:32 Head:4 Lay:2 LR:0.0051 -> Score: 0.82 (Flow)
+  [Mirror] Champion: Emb:24 Head:2 Lay:3 LR:0.0082 -> Score: 4.50 (Symmetry)
+  [Spark]  Champion: Emb:40 Head:4 Lay:1 LR:0.0120 -> Score: 2.50 (Creativity)
 
-  Winner: Emb:24 Head:2 Lay:1 Ctx:32 FF:3 LR:0.0119 Steps:500
-  Blacklisted: 1 species (24-1-1-24-3, avg loss 2.83)
+  >> The Gathering: Genes exchanged. The organism learns from all heads.
 ```
 
 A self-modifying Transformer implementation in Rust with zero ML dependencies. Starting from [Andrej Karpathy's microGPT](https://karpathy.github.io/2026/02/12/microgpt/), the project adds a spark of life: an evolutionary engine that discovers optimal hyperparameters and writes them back into the organism, transforming what the program becomes.
@@ -33,8 +23,8 @@ A self-modifying Transformer implementation in Rust with zero ML dependencies. S
             └──────┬───────┘
                    │
             ┌──────▼───────┐
-            │   Evolution   │  cargo run --release --bin evolve_loss
-            │  10 gens × 8  │  "I am searching"
+            │    Hydra      │  cargo run --release --bin hydra
+            │   Evolution   │  "We think, therefore we are"
             └──────┬───────┘
                    │ writes genome.json
             ┌──────▼───────┐
@@ -44,7 +34,7 @@ A self-modifying Transformer implementation in Rust with zero ML dependencies. S
 ```
 
 1. **Primordial**: Run `cargo run --release` — the creature runs with hardcoded defaults. It works, but it hasn't found itself yet.
-2. **Evolution**: Run `cargo run --release --bin evolve_loss` — populations of 8 organisms compete across 10 generations. Tournament selection, crossover, mutation, random immigrants. The fittest survive.
+2. **Evolution**: Run `cargo run --release --bin hydra` — The **Hydra** engine awakens. Three distinct heads (Weaver, Mirror, Spark) evolve independently, optimizing for different aesthetic goals. They synchronize periodically to exchange genetic breakthroughs.
 3. **Self-modification**: The winner's DNA is written to `genome.json`. The program has rewritten itself.
 4. **Evolved**: Now `cargo run --release` reads the genome and runs as the evolved creature — different architecture, different learning rate, different capacity. A new thing.
 
@@ -69,25 +59,19 @@ op!(Mul, mul, *, |_,o| o.data(), |s,_| s.data());
 ### III. The Architecture: GPT
 Token embeddings, positional embeddings, multi-head attention with KV caching, RMSNorm, and feed-forward layers — the full transformer stack, compact and readable.
 
-### IV. The Evolution Engine (v2)
+### IV. The Evolution Engine (v3: Hydra)
 
-The engine thinks in **species**, not just individuals. Organisms are grouped by architecture family, and the population is managed to maintain diversity while converging on winners.
+The engine mimics a Hydra — a multi-headed evolutionary organism. Instead of a single fitness function, distinct sub-populations ("Heads") optimize for different aesthetic goals in parallel.
 
-**Normal Breeding** (stagnation 0-1):
-- Elite carried forward, 2 random immigrants, crossover + mutation offspring
+**The Heads:**
+1. **The Weaver** (Flow): Optimizes for pronounceability, vowel/consonant rhythm, and linguistic smoothness.
+2. **The Mirror** (Symmetry): Optimizes for palindromes, repeating structures, and balanced patterns.
+3. **The Spark** (Creativity): Optimizes for pure novelty and deviation from the training data.
 
-**Championship Breeding** (stagnation 2-3):
-- Top 3 winners mated together with fine-tuning (small LR/steps tweaks)
-- **Growth mutation**: the proven winner earns a structural upgrade — an extra layer, doubled heads, expanded context, or wider feed-forward. The polydactyl cat effect: success breeds complexity.
-- Elite is force re-evaluated (no frozen loss advantage)
-
-**Cataclysm** (stagnation 4+):
-- Population nuked, rebuilt from expanded search space
-- Avoids blacklisted species (architectures that failed repeatedly)
-
-**Loser Blacklist**: Architectures producing loss > 2.3 across 2+ evaluations are remembered and avoided. The engine learns from failure.
-
-**Origin Tags**: Every organism is tagged with how it was born: `[random]`, `[elite]`, `[mutant]`, `[cross]`, `[hyper]`, `[immigrant]`, `[re-eval]`, `[cataclysm]`, `[grown]`, `[champion]`, `[tuned]`
+**The Cycle:**
+1. **Isolation**: Heads evolve independently for N generations.
+2. **The Gathering**: Champions from each head are collected.
+3. **Cross-Pollination**: The "Body" redistributes genetic material, allowing the Weaver to learn symmetry from the Mirror, and the Spark to learn flow from the Weaver.
 
 ## Quick Start
 
@@ -95,11 +79,8 @@ The engine thinks in **species**, not just individuals. Organisms are grouped by
 # Run the creature (primordial or evolved)
 cargo run --release
 
-# Evolve — searches for optimal DNA, writes genome.json
-cargo run --release --bin evolve_loss
-
-# Run the aesthetic evolution engine (fitness = name beauty)
-cargo run --release --bin evolve
+# Run Hydra — the multi-head evolutionary engine
+cargo run --release --bin hydra
 ```
 
 ## Project Structure
@@ -107,8 +88,8 @@ cargo run --release --bin evolve
 ```
 src/lib.rs              Autograd engine, GPT model, training loop, genome I/O
 src/main.rs             The living creature — reads genome.json if it exists
-src/bin/evolve_loss.rs  Loss evolution engine v2 (species-aware, championship, growth)
-src/bin/evolve.rs       Aesthetic evolution engine (flow, symmetry, creativity)
+src/bin/hydra.rs        Multi-head evolution engine (Weaver, Mirror, Spark)
+src/bin/evolve.rs       Classic single-objective evolution (legacy)
 genome.json             The organism's evolved DNA (written by evolution)
 experiments/            Timestamped experiment logs
 input.txt               Training data (names from Karpathy's makemore)
