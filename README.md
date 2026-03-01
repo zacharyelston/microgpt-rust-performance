@@ -1,183 +1,128 @@
-# microGPT: Python vs Rust Performance Comparison
+# MicroGPT: A Living Transformer
 
-## 🚀 **Rust vs Python Performance: Honest Comparison**
-
-**Fair Comparison (Same Algorithm):**
-- **Optimized Rust**: **1.48s** vs **Optimized Python**: **20.6s** = **14x speedup**
-
-**Overall Results:**
-- **Original Python**: 62.3s (68K graph nodes)
-- **Optimized Python**: 20.6s (6K graph nodes) 
-- **Original Rust**: 12.7s (68K graph nodes)
-- **Optimized Rust**: 1.48s (6K graph nodes)
-
-A comprehensive performance comparison between Python and Rust implementations of Karpathy's microGPT with automatic differentiation.
-
-| Version | Time | Speedup | Loss | Graph Size |
-|---------|------|---------|------|------------|
-| Original Python | 62.3s | 1x baseline | 2.6497 | ~68k nodes |
-| Optimized Python | 20.6s | 3.0x vs original | 2.6391 | ~6k nodes |
-| Original Rust | 12.7s | 4.9x vs original | 2.2941 | ~68k nodes |
-| **Optimized Rust** | **1.48s** | **14x vs optimized Python** | **2.4058** | **~6k nodes** |
-
-## 📁 Project Structure
+> A minimal GPT that evolves itself.
 
 ```
-microgpt/
-├── microgpt.py              # Python implementation (optimized)
-├── src/main.rs              # Rust implementation (optimized)
-├── Cargo.toml               # Rust dependencies
-├── COMPARISON.md             # Original comparison
-├── COMPARISON-New.md         # Complete development summary
-└── README.md                 # This file
+Last Evolution (v2) — 10 generations, 80 evaluations, 1820s
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Gen 1   1.5278  ████████████████████░░░░  8 species  [random]
+  Gen 2   1.5278  ████████████████████░░░░  8 species  [elite]
+  Gen 3   1.5278  ████████████████████░░░░  8 species  ← stagnation
+      *** CHAMPIONSHIP: breeding winners with growth ***
+  Gen 4   1.5886  ███████████████████░░░░░  6 species  [re-eval] [grown] [champion]
+  Gen 5   1.5232  ████████████████████░░░░  7 species  [immigrant] broke through
+  Gen 6   1.5232  ████████████████████░░░░  7 species
+  Gen 7   1.5232  ████████████████████░░░░  7 species  ← stagnation
+      *** CHAMPIONSHIP: breeding winners with growth ***
+  Gen 8   1.4960  █████████████████████░░░  6 species  [grown] emerged
+  Gen 9   1.4960  █████████████████████░░░  7 species
+  Gen 10  1.4676  █████████████████████░░░  8 species  [cross] new best
+
+  Winner: Emb:24 Head:2 Lay:1 Ctx:32 FF:3 LR:0.0119 Steps:500
+  Blacklisted: 1 species (24-1-1-24-3, avg loss 2.83)
 ```
 
-## 🛠️ Technologies
+A self-modifying Transformer implementation in Rust with zero ML dependencies. Starting from [Andrej Karpathy's microGPT](https://karpathy.github.io/2026/02/12/microgpt/), the project adds a spark of life: an evolutionary engine that discovers optimal hyperparameters and writes them back into the organism, transforming what the program becomes.
 
-### Python Version
-- Pure Python with no ML dependencies
-- Custom autograd system with computation graph
-- Adam optimizer with learning rate decay
-- Multi-head attention and RMSNorm
+## The Lifecycle
 
-### Rust Version
-- `Rc<RefCell<Value>>` for shared mutable references
-- Identical autograd algorithm adapted to Rust
-- Stack-based backward pass optimization
-- Linear operation fusion for graph reduction
+```
+            ┌─────────────┐
+            │  Primordial  │  cargo run --release
+            │  (defaults)  │  "I am unformed"
+            └──────┬───────┘
+                   │
+            ┌──────▼───────┐
+            │   Evolution   │  cargo run --release --bin evolve_loss
+            │  10 gens × 8  │  "I am searching"
+            └──────┬───────┘
+                   │ writes genome.json
+            ┌──────▼───────┐
+            │   Evolved     │  cargo run --release
+            │  (from DNA)   │  "I have become"
+            └───────────────┘
+```
 
-## 🏃‍♂️ Quick Start
+1. **Primordial**: Run `cargo run --release` — the creature runs with hardcoded defaults. It works, but it hasn't found itself yet.
+2. **Evolution**: Run `cargo run --release --bin evolve_loss` — populations of 8 organisms compete across 10 generations. Tournament selection, crossover, mutation, random immigrants. The fittest survive.
+3. **Self-modification**: The winner's DNA is written to `genome.json`. The program has rewritten itself.
+4. **Evolved**: Now `cargo run --release` reads the genome and runs as the evolved creature — different architecture, different learning rate, different capacity. A new thing.
 
-### Python
+## What's Inside
+
+### I. The Atom: `Val`
+Every number in the system is a `Val` — it holds data, remembers its gradient, and knows its computational history. Backpropagation happens automatically through the graph. This is the entire autograd engine, built from scratch.
+
+```rust
+struct Val(Rc<RefCell<Node>>);
+struct Node { data: f64, grad: f64, prev: Vec<(Val, f64)> }
+```
+
+### II. The Algebra: Operators
+Arithmetic is defined once through a macro. Add, subtract, multiply — each operation records the local gradient for the chain rule. Whether you write `a + b`, `&a + b`, or `a + &b`, the behavior is identical.
+
+```rust
+op!(Add, add, +, |_,_| 1., |_,_| 1.);
+op!(Mul, mul, *, |_,o| o.data(), |s,_| s.data());
+```
+
+### III. The Architecture: GPT
+Token embeddings, positional embeddings, multi-head attention with KV caching, RMSNorm, and feed-forward layers — the full transformer stack, compact and readable.
+
+### IV. The Evolution Engine (v2)
+
+The engine thinks in **species**, not just individuals. Organisms are grouped by architecture family, and the population is managed to maintain diversity while converging on winners.
+
+**Normal Breeding** (stagnation 0-1):
+- Elite carried forward, 2 random immigrants, crossover + mutation offspring
+
+**Championship Breeding** (stagnation 2-3):
+- Top 3 winners mated together with fine-tuning (small LR/steps tweaks)
+- **Growth mutation**: the proven winner earns a structural upgrade — an extra layer, doubled heads, expanded context, or wider feed-forward. The polydactyl cat effect: success breeds complexity.
+- Elite is force re-evaluated (no frozen loss advantage)
+
+**Cataclysm** (stagnation 4+):
+- Population nuked, rebuilt from expanded search space
+- Avoids blacklisted species (architectures that failed repeatedly)
+
+**Loser Blacklist**: Architectures producing loss > 2.3 across 2+ evaluations are remembered and avoided. The engine learns from failure.
+
+**Origin Tags**: Every organism is tagged with how it was born: `[random]`, `[elite]`, `[mutant]`, `[cross]`, `[hyper]`, `[immigrant]`, `[re-eval]`, `[cataclysm]`, `[grown]`, `[champion]`, `[tuned]`
+
+## Quick Start
+
 ```bash
-python3 microgpt.py
+# Run the creature (primordial or evolved)
+cargo run --release
+
+# Evolve — searches for optimal DNA, writes genome.json
+cargo run --release --bin evolve_loss
+
+# Run the aesthetic evolution engine (fitness = name beauty)
+cargo run --release --bin evolve
 ```
 
-### Rust
-```bash
-cargo build --release
-./target/release/microgpt_rust
-```
-
-## 📊 Optimization Journey
-
-### Phase 1: Initial Implementation
-- Built working Python and Rust versions
-- Rust achieved 5x speedup over Python (12.7s vs 62.3s)
-
-### Phase 2: Performance Analysis
-- **Identified bottleneck**: Backward pass consumed 79.1% of time
-- **Discovered issue**: 68,780 computation graph nodes per step
-- **Root cause**: Creating nodes for every scalar operation
-
-### Phase 3: Algorithmic Optimizations
-Applied identical optimizations to both languages:
-
-1. **Linear Operation Fusion**
-   - Combined multiply-add operations into single nodes
-   - Reduced intermediate node creation by ~10x
-
-2. **Stack-Based Backward Pass**
-   - Replaced topological sort with efficient stack traversal
-   - Eliminated sorting overhead
-
-3. **Graph Size Reduction**
-   - Minimized computation graph from 68k to ~6k nodes (91% reduction)
-   - Maintained proper gradient flow
-
-### Phase 4: Results
-- **Python**: 62.3s → 20.6s (3.0x speedup)
-- **Rust**: 12.7s → 1.48s (8.6x speedup)
-- **Final**: Rust 14x faster than optimized Python
-
-## 🔍 Key Insights
-
-1. **Algorithmic optimization benefits both languages** - Identical optimizations yielded significant speedups in both Python and Rust
-
-2. **Rust maintains significant performance advantage** - Even with identical algorithms, Rust's compiled nature provides inherent advantages
-
-3. **Computation graph size is critical** - Reducing from 68k to 6k nodes was the primary optimization
-
-4. **Rust is suitable for ML workloads** - Successfully implements complex autograd systems with substantial performance benefits
-
-5. **Safety and performance can coexist** - Rust achieves speedup while maintaining memory safety and correctness
-
-## 📈 Performance Breakdown (Optimized Rust)
+## Project Structure
 
 ```
---- Profiling Results ---
-Forward pass:  0.48s (32.4%)
-Backward pass: 0.99s (66.9%)
-Softmax:       0.03s (2.2%)
-Param update:  0.01s (0.7%)
-Avg graph size: 6109 nodes
+src/lib.rs              Autograd engine, GPT model, training loop, genome I/O
+src/main.rs             The living creature — reads genome.json if it exists
+src/bin/evolve_loss.rs  Loss evolution engine v2 (species-aware, championship, growth)
+src/bin/evolve.rs       Aesthetic evolution engine (flow, symmetry, creativity)
+genome.json             The organism's evolved DNA (written by evolution)
+experiments/            Timestamped experiment logs
+input.txt               Training data (names from Karpathy's makemore)
 ```
 
-## 🧪 Model Architecture
+## Dependencies
 
-Both implementations include:
-- **GPT-style transformer** with multi-head attention
-- **Automatic differentiation** via computation graphs
-- **Adam optimizer** with bias correction
-- **RMSNorm** layer normalization
-- **Embedding layers** for tokens and positions
+- `rand` — random number generation
+- `rayon` — parallel evaluation of organism populations
+- `chrono` — timestamped experiment filenames
 
-### Model Specs
-- **Layers**: 1 transformer layer
-- **Embedding dim**: 16
-- **Heads**: 4 attention heads
-- **Block size**: 16 context length
-- **Parameters**: 4,192 total parameters
-- **Dataset**: 32,033 names from makemore
+No ML frameworks. No BLAS. No GPU. Just math.
 
-## 🎯 Sample Outputs
+## Acknowledgments
 
-### Optimized Python
-```
-sample  1: gia
-sample  2: jean
-sample  3: semsaa
-sample  4: daa
-sample  5: biy
-```
-
-### Optimized Rust
-```
-sample  1: idmeb
-sample  2: jeeoa
-sample  3: adselamiinamalrk
-sample  4: matt
-sample  5: aaa
-```
-
-Both versions generate realistic name-like sequences, demonstrating successful learning.
-
-## 📚 Detailed Analysis
-
-See [`COMPARISON-New.md`](COMPARISON-New.md) for:
-- Complete development timeline
-- Detailed optimization code examples
-- Performance profiling methodology
-- Comprehensive benchmark results
-
-## 🤝 Contributing
-
-This project serves as a case study for high-performance ML systems in Rust. Contributions welcome for:
-- Further optimizations
-- Additional model architectures
-- Benchmarking on different hardware
-- Memory usage analysis
-
-## 📄 License
-
-This project follows the same spirit as Karpathy's original microGPT - educational and research-focused.
-
-## 🙏 Acknowledgments
-
-- **Andrej Karpathy** for the original microGPT implementation and educational content
-- **Rust community** for demonstrating that ML systems can be both safe and fast
-- **Performance optimization community** for graph reduction techniques
-
----
-
-**Key Takeaway**: Rust achieves 42x speedup over Python for ML workloads while maintaining safety, correctness, and code quality. This project demonstrates that Rust is an excellent choice for performance-critical machine learning applications.
+- [Andrej Karpathy](https://karpathy.github.io/2026/02/12/microgpt/) for the original microGPT
+- The Rust language for making this kind of thing possible in ~500 lines

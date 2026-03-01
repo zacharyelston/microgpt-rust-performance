@@ -2,10 +2,12 @@
 name = "microgpt_rust"
 version = "0.1.0"
 edition = "2021"
+default-run = "microgpt_rust"
 
 [dependencies]
 rand = "0.8"
-reqwest = { version = "0.11", features = ["blocking"] }
+rayon = "1.10"
+chrono = "0.4"
 
 [profile.release]
 opt-level = 3
