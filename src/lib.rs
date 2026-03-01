@@ -285,7 +285,7 @@ pub struct TrainingConfig {
 impl Default for TrainingConfig {
     fn default() -> Self {
         Self {
-            n_emb: 16, n_ctx: 16, n_layer: 1, n_head: 4, n_ff_exp: 4,
+            n_emb: 8, n_ctx: 8, n_layer: 2, n_head: 4, n_ff_exp: 4,
             steps: 200, lr: 0.005,
             adam_beta1: 0.85, adam_beta2: 0.99, adam_eps: 1e-8,
             gen_samples: 5, rms_eps: 1e-5, init_scale: 0.1,
