@@ -524,6 +524,15 @@ pub fn train_and_generate(cfg: &TrainingConfig, silent: bool) -> TrainingResult 
     let docs: Vec<&str> = raw.lines().collect();
     let mut final_loss = 0.0;
 
+    if docs.is_empty() {
+        // Avoid panics on empty input; return a sentinel loss.
+        return TrainingResult {
+            names: Vec::new(),
+            final_loss: f64::INFINITY,
+            num_params,
+        };
+    }
+
     for step in 0..cfg.steps {
         // Tokenize one name: [START, char1, char2, ..., END]
         let doc = docs[step % docs.len()];
@@ -537,6 +546,11 @@ pub fn train_and_generate(cfg: &TrainingConfig, silent: bool) -> TrainingResult 
         // Truncate to context window to prevent positional embedding overflow
         if tokens.len() > cfg.n_ctx {
             tokens.truncate(cfg.n_ctx);
+        }
+
+        if tokens.len() < 2 {
+            // Not enough tokens to compute next-token loss safely.
+            continue;
         }
 
         // Forward pass: compute cross-entropy loss over all next-token predictions

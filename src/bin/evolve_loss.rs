@@ -501,7 +501,7 @@ fn main() {
                 candidate.evaluate(i + 1, run_seed);
             });
 
-        population.sort_by(|a, b| a.loss.partial_cmp(&b.loss).unwrap());
+        population.sort_by(|a, b| a.loss.total_cmp(&b.loss));
 
         // Record losers in the blacklist
         for g in &population {

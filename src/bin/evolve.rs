@@ -288,7 +288,7 @@ fn main() {
         println!("--- Generation Time: {:.2?} ---", gen_time);
 
         // Sort by fitness (higher = more beautiful)
-        population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+        population.sort_by(|a, b| b.fitness.total_cmp(&a.fitness));
 
         let best = &population[0];
         println!(
