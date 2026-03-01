@@ -1,0 +1,66 @@
+=== MicroGPT Loss Evolution Engine v2 ===
+Experiment: experiments/evolve_20260227_150547.log
+Target: loss < 1.2
+Population: 8, Generations: 1
+Selection: tournament(k=3), 2 immigrants/gen
+Stagnation: championship@2, cataclysm@4
+Blacklist: loss > 2.3 after 2 samples
+
+--- Generation 1/1 ---
+> #1: Emb:8   Head:4 Lay:1 Ctx:24 FF:2 LR:0.0269 Steps:500  | Loss: 1.4803 [random]
+  #2: Emb:12  Head:2 Lay:2 Ctx:8  FF:1 LR:0.0136 Steps:200  | Loss: 1.5184 [random]
+  #3: Emb:12  Head:2 Lay:1 Ctx:16 FF:3 LR:0.0291 Steps:500  | Loss: 1.5629 [random]
+  #4: Emb:12  Head:1 Lay:1 Ctx:16 FF:3 LR:0.0194 Steps:200  | Loss: 1.7516 [random]
+  #5: Emb:24  Head:1 Lay:3 Ctx:8  FF:1 LR:0.0237 Steps:500  | Loss: 1.8946 [random]
+  #6: Emb:12  Head:1 Lay:2 Ctx:24 FF:1 LR:0.0022 Steps:1500 | Loss: 2.0766 [random]
+  #7: Emb:20  Head:2 Lay:2 Ctx:16 FF:4 LR:0.0095 Steps:300  | Loss: 2.3025 [random]
+  #8: Emb:32  Head:1 Lay:3 Ctx:12 FF:2 LR:0.0123 Steps:1500 | Loss: 2.4444 [random]
+  Best: 1.4803 | Worst: 2.4444 | Spread: 0.9641 | Species: 8 (12% largest) | Stagnation: 0 | Blacklisted: 0 | 547s
+
+========================================
+       EVOLUTION COMPLETE
+========================================
+  Generations: 1
+  Total evaluations: 8
+  Total time: 547s (547s/gen avg)
+  Best loss: 1.4803
+  Best config: Emb:8   Head:4 Lay:1 Ctx:24 FF:2 LR:0.0269 Steps:500 
+  Blacklisted species: 0
+  Target 1.2 NOT reached
+
+--- Evolution Trajectory ---
+   Gen      Best    Species
+     1    1.4803       100%  ##############################
+
+--- Top Configs Across All Generations ---
+   1. Gen 1 | Loss 1.4803 | Emb:8   Head:4 Lay:1 Ctx:24 FF:2 LR:0.0269 Steps:500  [random]
+   2. Gen 1 | Loss 1.5184 | Emb:12  Head:2 Lay:2 Ctx:8  FF:1 LR:0.0136 Steps:200  [random]
+   3. Gen 1 | Loss 1.5629 | Emb:12  Head:2 Lay:1 Ctx:16 FF:3 LR:0.0291 Steps:500  [random]
+   4. Gen 1 | Loss 1.7516 | Emb:12  Head:1 Lay:1 Ctx:16 FF:3 LR:0.0194 Steps:200  [random]
+   5. Gen 1 | Loss 1.8946 | Emb:24  Head:1 Lay:3 Ctx:8  FF:1 LR:0.0237 Steps:500  [random]
+   6. Gen 1 | Loss 2.0766 | Emb:12  Head:1 Lay:2 Ctx:24 FF:1 LR:0.0022 Steps:1500 [random]
+   7. Gen 1 | Loss 2.3025 | Emb:20  Head:2 Lay:2 Ctx:16 FF:4 LR:0.0095 Steps:300  [random]
+   8. Gen 1 | Loss 2.4444 | Emb:32  Head:1 Lay:3 Ctx:12 FF:2 LR:0.0123 Steps:1500 [random]
+
+--- Hyperparameter Analysis ---
+  Param            Top 10  Bottom 10      Delta
+  Embedding          16.5       16.5      +0.0  
+  Heads               1.8        1.8      +0.0  
+  Layers              1.9        1.9      +0.0  
+  Context            15.5       15.5      +0.0  
+  FF Mult             2.1        2.1      +0.0  
+  Learn Rate       0.0171     0.0171   +0.0000  
+  Steps             650.0      650.0      +0.0  
+
+--- Insights ---
+  No strong hyperparameter trends detected (more generations may help).
+
+--- Genome Written ---
+  Saved to genome.json (generation 1)
+  The organism has evolved.
+  Run `cargo run --release` to see the new creature.
+
+--- Final Demo with Best Config ---
+Final loss: 1.5161
+
+Experiment saved to: experiments/evolve_20260227_150547.log
